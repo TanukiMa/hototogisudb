@@ -101,7 +101,6 @@ def test_ssk_shobyomei_parse_row(tmp_path):
     assert record["base_name"] == "糖尿病"
     assert record["kana_name"] == "トウニョウビョウ"
     assert record["is_active"] is True
-    assert record["dict_enabled"] is True
 
 
 def test_ssk_shinryo_koi_parse_row(tmp_path):

@@ -48,8 +48,6 @@ class SskShinryoKoiImporter(BaseImporter):
                     "is_active": is_active,
                     "batch_id": batch_id,
                 }
-                if change_type == "1":
-                    record["dict_enabled"] = True
                 rows.append(record)
         return rows
 

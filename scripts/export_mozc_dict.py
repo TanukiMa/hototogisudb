@@ -1,0 +1,26 @@
+"""Export Mozc system dictionary TSV from Supabase."""
+import argparse
+import logging
+from pathlib import Path
+
+from mozc4med_dict.exporters.mozc_system_dict import MozcSystemDictExporter
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Export Mozc system dictionary")
+    parser.add_argument("--output", type=Path, default=Path("dist/mozc4med_medical.txt"))
+    parser.add_argument("--dry-run", action="store_true", help="Count only, no file written")
+    args = parser.parse_args()
+
+    exporter = MozcSystemDictExporter()
+    count = exporter.export(output_path=args.output, dry_run=args.dry_run)
+    if args.dry_run:
+        logging.info("Dry-run: %d entries would be exported", count)
+    else:
+        logging.info("Exported %d entries to %s", count, args.output)
+
+
+if __name__ == "__main__":
+    main()

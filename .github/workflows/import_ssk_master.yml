@@ -1,0 +1,43 @@
+name: Import SSK Master
+
+on:
+  workflow_dispatch:
+    inputs:
+      master_type:
+        description: 'Master type to import'
+        required: true
+        type: choice
+        options:
+          - shinryo_koi
+          - iyakuhin
+          - shobyomei
+      file_url:
+        description: 'Direct URL to the full CSV file (from SSK ZIP)'
+        required: true
+        type: string
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Download master CSV
+        run: curl -fsSL "${{ inputs.file_url }}" -o master.csv
+
+      - name: Import master
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python scripts/import_${{ inputs.master_type }}.py \
+            --file master.csv \
+            --url "${{ inputs.file_url }}" \
+            --imported-by "github-actions"

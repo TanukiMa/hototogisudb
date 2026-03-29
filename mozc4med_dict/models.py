@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -9,19 +8,19 @@ class PosType(BaseModel):
     left_id: int
     right_id: int
     description: str
-    category: Optional[str] = None
+    category: str | None = None
 
 
 class ImportBatch(BaseModel):
     id: int
     source_type: str
-    source_url: Optional[str] = None
+    source_url: str | None = None
     file_name: str
-    file_sha256: Optional[str] = None
-    record_count: Optional[int] = None
-    imported_by: Optional[str] = None
-    imported_at: Optional[datetime] = None
-    notes: Optional[str] = None
+    file_sha256: str | None = None
+    record_count: int | None = None
+    imported_by: str | None = None
+    imported_at: datetime | None = None
+    notes: str | None = None
 
 
 class MozcDictEntry(BaseModel):

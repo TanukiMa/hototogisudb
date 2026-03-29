@@ -1,0 +1,24 @@
+[changelog]
+header = "# Changelog\n\nAll notable changes to mozc4med-dict are documented here.\n"
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in commits %}
+- {{ commit.message }} ([{{ commit.id | truncate(length=7, end="") }}](../../commit/{{ commit.id }}))
+{% endfor %}
+{% endfor %}
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+commit_parsers = [
+  { message = "^feat",     group = "Features"       },
+  { message = "^fix",      group = "Bug Fixes"      },
+  { message = "^schema",   group = "Schema Changes" },
+  { message = "^chore",    group = "Chores"         },
+  { message = "^docs",     group = "Documentation"  },
+  { message = "^test",     group = "Tests"          },
+  { message = "^refactor", group = "Refactor"       },
+]

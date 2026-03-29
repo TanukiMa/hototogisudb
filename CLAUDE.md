@@ -52,7 +52,11 @@ mozc4med-dict/
 │   └── workflows/
 │       ├── export_mozc_dict.yml    # Dictionary export (main)
 │       ├── import_ssk_master.yml   # SSK master import (manual trigger)
-│       └── supabase_keepalive.yml  # Prevent Supabase free-tier freeze (daily ping)
+│       ├── supabase_keepalive.yml  # Prevent Supabase free-tier freeze (daily ping)
+│       ├── ci.yml                  # CI: lint + unit tests + integration tests (on PR)
+│       └── update_changelog.yml    # Regenerate CHANGELOG.md via git-cliff (on push to main)
+│
+├── cliff.toml                  # git-cliff configuration for CHANGELOG generation
 │
 ├── dist/
 │   └── mozc4med_medical.txt        # Exported dictionary (committed back by GHA)
@@ -94,8 +98,21 @@ mozc4med-dict/
 │   └── supabase_keepalive.py       # Supabase freeze-prevention ping
 │
 └── tests/
-    ├── test_importers.py
-    └── test_exporters.py
+    ├── unit/
+    │   ├── test_kana.py
+    │   ├── test_importer_base.py
+    │   ├── test_ssk_shobyomei.py
+    │   ├── test_ssk_iyakuhin.py
+    │   ├── test_ssk_shinryo_koi.py
+    │   └── test_mozc_exporter.py
+    └── integration/
+        ├── conftest.py
+        ├── test_import_shobyomei.py
+        ├── test_import_iyakuhin.py
+        ├── test_import_shinryo_koi.py
+        ├── test_upsert_no_overwrite_dict_enabled.py
+        ├── test_sha256_dedup.py
+        └── test_export_pipeline.py
 ```
 
 ---
@@ -134,6 +151,14 @@ dependencies = [
     "supabase>=2.0",        # supabase-py — Supabase Python client
     "python-dotenv>=1.0",
     "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-mock",          # Mock supabase-py client in unit tests
+    "ruff",
+    "mypy",
 ]
 ```
 
@@ -692,6 +717,495 @@ python scripts/manage_dict_enabled.py --disable <code>    # Remove term from dic
 
 ---
 
+## Verification & Testing
+
+### Overview
+
+| Layer | Tool | When |
+|---|---|---|
+| Static analysis | `ruff check` + `mypy` | On every file save / pre-commit |
+| Unit tests | `pytest` | Local + CI on every push |
+| Integration tests | `pytest` + dedicated Supabase test project | Local + CI on every PR |
+| CI pipeline | GitHub Actions `ci.yml` | Triggered on pull requests to `main` |
+
+---
+
+### Additional GitHub Secrets (test project)
+
+Register alongside the production secrets in **Settings → Secrets and variables → Actions**.
+
+| Secret | Value | Purpose |
+|---|---|---|
+| `SUPABASE_TEST_URL` | `https://yyyy.supabase.co` | Dedicated test project URL |
+| `SUPABASE_TEST_SERVICE_ROLE_KEY` | `eyJ...` | Test project service role key |
+
+The test project schema must be kept in sync with `schema/migrations/`.
+Run all migrations against the test project whenever a new migration is added.
+
+---
+
+### Static Analysis
+
+```bash
+# Lint + auto-fix
+ruff check . --fix
+
+# Type checking
+mypy mozc4med_dict/
+```
+
+`pyproject.toml` configuration:
+
+```toml
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]   # pycodestyle, pyflakes, isort, pyupgrade
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+```
+
+---
+
+### Unit Tests (`tests/unit/`)
+
+Unit tests must run **without any network access** — no Supabase connection, no file I/O.
+Use `pytest` with `unittest.mock` or `pytest-mock` to stub out `db.get_client()`.
+
+```
+tests/
+├── unit/
+│   ├── test_kana.py            # normalize_reading() edge cases
+│   ├── test_importer_base.py   # SHA-256 dedup logic, change_type routing
+│   ├── test_ssk_shobyomei.py   # Field mapping (field_no → column)
+│   ├── test_ssk_iyakuhin.py    # Dual-entry generation (brand + INN)
+│   ├── test_ssk_shinryo_koi.py
+│   └── test_mozc_exporter.py   # TSV line format, cost values
+└── integration/
+    └── ...                     # see below
+```
+
+Key cases to cover in unit tests:
+
+| Module | What to test |
+|---|---|
+| `utils/kana.py` | Full-width katakana, half-width katakana, mixed input, non-kana raises `ValueError` |
+| `importers/base.py` | Duplicate SHA-256 aborts; `change_type=4` sets `is_active=False`; `dict_enabled` not touched on update |
+| `exporters/mozc_system_dict.py` | TSV format (`\t` delimited, 5 fields); correct cost per table; UTF-8 LF output |
+
+```bash
+# Run unit tests only
+pytest tests/unit/ -v
+```
+
+---
+
+### Integration Tests (`tests/integration/`)
+
+Integration tests run against the **dedicated Supabase test project**.
+Credentials are loaded from environment variables (same mechanism as production).
+
+```
+tests/
+└── integration/
+    ├── conftest.py              # Session-scoped client; truncate tables before each test
+    ├── test_import_shobyomei.py # Full CSV → DB round-trip
+    ├── test_import_iyakuhin.py
+    ├── test_import_shinryo_koi.py
+    ├── test_upsert_no_overwrite_dict_enabled.py  # CRITICAL: dict_enabled must survive re-import
+    ├── test_sha256_dedup.py     # Same file imported twice → second run aborts
+    └── test_export_pipeline.py  # DB → TSV output validation
+```
+
+`tests/integration/conftest.py` pattern:
+
+```python
+import os
+import pytest
+from supabase import create_client, Client
+
+@pytest.fixture(scope="session")
+def client() -> Client:
+    url = os.environ["SUPABASE_TEST_URL"]
+    key = os.environ["SUPABASE_TEST_SERVICE_ROLE_KEY"]
+    return create_client(url, key)
+
+@pytest.fixture(autouse=True)
+def truncate_tables(client: Client):
+    """Wipe all test data before each test for isolation."""
+    for table in ["ssk_shobyomei", "ssk_iyakuhin", "ssk_shinryo_koi",
+                  "custom_terms", "import_batches"]:
+        client.table(table).delete().neq("id", 0).execute()
+```
+
+**Must-have integration test — `dict_enabled` survives re-import**:
+
+```python
+def test_upsert_does_not_overwrite_dict_enabled(client):
+    # 1. Import a record
+    import_shobyomei(client, [sample_row], batch_id=1)
+    # 2. Manually disable it
+    client.table("ssk_shobyomei") \
+        .update({"dict_enabled": False}) \
+        .eq("shobyomei_code", sample_row.code).execute()
+    # 3. Re-import the same record (simulates a master update)
+    import_shobyomei(client, [sample_row], batch_id=2)
+    # 4. dict_enabled must still be False
+    row = client.table("ssk_shobyomei") \
+        .select("dict_enabled") \
+        .eq("shobyomei_code", sample_row.code) \
+        .single().execute().data
+    assert row["dict_enabled"] is False
+```
+
+```bash
+# Run integration tests (requires SUPABASE_TEST_* env vars)
+pytest tests/integration/ -v
+
+# Run all tests
+pytest -v
+```
+
+---
+
+### CI Workflow — `ci.yml`
+
+Runs on every pull request to `main`. Blocks merge if any check fails.
+
+```yaml
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: mypy mozc4med_dict/
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/unit/ -v
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests         # Run only after unit tests pass
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e ".[dev]"
+      - name: Run integration tests
+        env:
+          SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
+          SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
+        run: pytest tests/integration/ -v
+```
+
+The three jobs run as: `lint` → `unit-tests` → `integration-tests`.
+Integration tests are gated on unit tests passing to avoid burning Supabase API quota
+on obviously broken code.
+
+---
+
+## README.md
+
+### Generation & Maintenance
+
+Claude Code generates `README.md` when the project is first initialized,
+and **must update it whenever code changes affect usage, CLI arguments, or schema**.
+
+### Required Sections
+
+```markdown
+# mozc4med-dict
+
+One-line description of the project.
+
+## Requirements
+- Python 3.11+
+- Supabase project (production + test)
+- Access to SSK master CSV files
+
+## Setup
+1. Clone the repository
+2. Copy `.env.example` to `.env` and fill in credentials
+3. Install dependencies: `pip install -e ".[dev]"`
+4. Apply migrations to your Supabase project (see `schema/migrations/`)
+
+## Importing SSK Masters
+<!-- CLI usage for each import script with all flags -->
+
+## Exporting the Mozc Dictionary
+<!-- CLI usage for export_mozc_dict.py -->
+
+## Managing dict_enabled
+<!-- CLI usage for manage_dict_enabled.py -->
+
+## Running Tests
+<!-- pytest commands for unit and integration tests -->
+
+## Database Schema
+<!-- Brief description of each table and the two-flag design -->
+
+## GitHub Actions Workflows
+<!-- Table of all workflows, triggers, and purpose -->
+
+## License
+```
+
+### Update Rules for Claude Code
+
+When modifying any of the following, README.md **must** be updated in the same commit:
+
+| Change | README section to update |
+|---|---|
+| New / changed CLI flag | Importing / Exporting / Managing sections |
+| New table or column | Database Schema section |
+| New workflow or changed trigger | GitHub Actions Workflows section |
+| New dependency | Requirements / Setup sections |
+| Changed cost values or POS mapping | Database Schema section |
+
+---
+
+## CHANGELOG.md
+
+### Tooling: `git-cliff` + Conventional Commits
+
+`CHANGELOG.md` is **auto-generated** by [git-cliff](https://github.com/orhun/git-cliff)
+on every push to `main`, using commit messages that follow
+[Conventional Commits](https://www.conventionalcommits.org/) format.
+
+### Conventional Commit Prefixes Used in This Project
+
+| Prefix | Meaning | Appears in CHANGELOG |
+|---|---|---|
+| `feat:` | New feature or importer/exporter | ✅ Features |
+| `fix:` | Bug fix | ✅ Bug Fixes |
+| `schema:` | Database migration added | ✅ Schema Changes |
+| `chore:` | Dictionary export, keep-alive, CI tweaks | ✅ Chores |
+| `docs:` | README or CHANGELOG update | ✅ Documentation |
+| `test:` | Test additions or fixes | ✅ Tests |
+| `refactor:` | Code restructure without behavior change | ✅ Refactor |
+
+Commit message examples:
+```
+feat: add ssk_iyakuhin importer with dual-entry generation
+fix: normalize half-width katakana in kana.py
+schema: add batch_id foreign key to ssk_shobyomei
+chore: update mozc4med_medical.txt
+docs: update README CLI reference for export script
+test: add dict_enabled upsert invariant test
+```
+
+### `cliff.toml` (place in repository root)
+
+```toml
+[changelog]
+header = "# Changelog\n\nAll notable changes to mozc4med-dict are documented here.\n"
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in commits %}
+- {{ commit.message }} ([{{ commit.id | truncate(length=7, end="") }}](../../commit/{{ commit.id }}))
+{% endfor %}
+{% endfor %}
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+commit_parsers = [
+  { message = "^feat",     group = "Features"       },
+  { message = "^fix",      group = "Bug Fixes"      },
+  { message = "^schema",   group = "Schema Changes" },
+  { message = "^chore",    group = "Chores"         },
+  { message = "^docs",     group = "Documentation"  },
+  { message = "^test",     group = "Tests"          },
+  { message = "^refactor", group = "Refactor"       },
+]
+```
+
+### `update_changelog.yml` Workflow
+
+Runs on every push to `main`. Regenerates `CHANGELOG.md` and commits it back.
+
+```yaml
+name: Update Changelog
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # git-cliff needs full history
+
+      - name: Generate CHANGELOG.md
+        uses: orhun/git-cliff-action@v3
+        with:
+          config: cliff.toml
+          args: --verbose
+        env:
+          OUTPUT: CHANGELOG.md
+
+      - name: Commit CHANGELOG.md
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet || git commit -m "docs: update CHANGELOG.md [skip ci]"
+          git push
+```
+
+> `[skip ci]` in the commit message prevents the CI workflow from re-triggering
+> on the auto-generated commit.
+
+### Workflow File Summary (updated)
+
+| Workflow file | Trigger | Purpose |
+|---|---|---|
+| `ci.yml` | PR to `main` | Lint + unit tests + integration tests |
+| `export_mozc_dict.yml` | schedule (weekly) + manual | Export dictionary, commit back |
+| `import_ssk_master.yml` | manual only | Import SSK master CSV |
+| `supabase_keepalive.yml` | schedule (daily) | Prevent Supabase free-tier freeze |
+| `update_changelog.yml` | push to `main` | Regenerate CHANGELOG.md via git-cliff |
+
+Add `update_changelog.yml` to the `.github/workflows/` directory structure.
+
+---
+
+## Cross-Platform Compatibility
+
+All code must run on **Windows, macOS, and Linux** without modification.
+
+### Path Handling
+
+Never use string concatenation or hardcoded `/` separators for file paths.
+Always use `pathlib.Path`.
+
+```python
+# ❌ Wrong
+output = "dist/" + filename
+
+# ✅ Correct
+from pathlib import Path
+output = Path("dist") / filename
+```
+
+### Line Endings
+
+The exported Mozc dictionary (`dist/mozc4med_medical.txt`) must always be **UTF-8, LF (`\n`)**.
+Force LF explicitly when writing — do not rely on the OS default:
+
+```python
+with open(output_path, "w", encoding="utf-8", newline="\n") as f:
+    f.write(line)
+```
+
+Add a `.gitattributes` to prevent Git from converting line endings:
+
+```gitattributes
+# .gitattributes
+dist/mozc4med_medical.txt  text eol=lf
+*.py                        text eol=lf
+*.sql                       text eol=lf
+*.md                        text eol=lf
+*.toml                      text eol=lf
+*.yml                       text eol=lf
+```
+
+### File Encoding
+
+SSK master CSVs are Shift-JIS. Always specify encoding explicitly — never rely on the OS default:
+
+```python
+# ✅ Always explicit
+with open(csv_path, encoding="cp932") as f:
+    ...
+```
+
+### CLI Scripts
+
+All scripts use `argparse` (stdlib) — no Bash or shell scripts.
+This ensures identical behavior across platforms.
+
+```python
+# scripts/import_shobyomei.py
+import argparse
+from pathlib import Path
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--file", type=Path, required=True)
+    parser.add_argument("--url",  type=str,  required=True)
+    parser.add_argument("--imported-by", type=str, default="local")
+    args = parser.parse_args()
+    ...
+```
+
+### Environment Variables
+
+`python-dotenv` loads `.env` on all platforms. No platform-specific env var syntax
+(`export` / `set`) should appear in documentation examples — use `.env` or `os.environ` instead.
+
+### `pyproject.toml` Entry Points
+
+Define CLI entry points in `pyproject.toml` so scripts are invokable
+as `mozc4med-export` etc. on all platforms (avoids `python scripts/xxx.py` on Windows PATH issues):
+
+```toml
+[project.scripts]
+mozc4med-import-shinryo-koi = "scripts.import_shinryo_koi:main"
+mozc4med-import-iyakuhin    = "scripts.import_iyakuhin:main"
+mozc4med-import-shobyomei   = "scripts.import_shobyomei:main"
+mozc4med-import-csv         = "scripts.import_csv:main"
+mozc4med-export             = "scripts.export_mozc_dict:main"
+mozc4med-keepalive          = "scripts.supabase_keepalive:main"
+```
+
+### Platform Testing in CI
+
+The CI `unit-tests` job runs on all three platforms:
+
+```yaml
+# In ci.yml — unit-tests job
+strategy:
+  matrix:
+    os: [ubuntu-latest, macos-latest, windows-latest]
+runs-on: ${{ matrix.os }}
+```
+
+Integration tests run on `ubuntu-latest` only (Supabase API is platform-independent;
+no need to triple the API quota consumption).
+
+---
+
 ## Development Rules
 
 1. **All `reading` values must be hiragana.** Always pass through `utils/kana.normalize_reading()`.
@@ -702,7 +1216,8 @@ python scripts/manage_dict_enabled.py --disable <code>    # Remove term from dic
 6. **Never hardcode credentials.** Always read from `os.environ`.
 7. Access SSK CSV fields as `row[field_no - 1]` (0-indexed, field numbers from the SSK PDF spec).
 8. Migrations live in `schema/migrations/` as numbered SQL files.
-9. Code style: `ruff`. Type hints required on all functions.
+10. **Cross-platform**: use `pathlib.Path` for all paths, always specify `encoding=` explicitly, write output files with `newline="\n"`.
+11. Never use shell-specific syntax (`&&`, `export`, backticks) in Python code or documentation examples.
 
 ---
 
@@ -717,4 +1232,13 @@ python scripts/manage_dict_enabled.py --disable <code>    # Remove term from dic
 - **CRITICAL: Never add `dict_enabled` to the `ON CONFLICT DO UPDATE` SET clause.**
 - In GHA workflows, always pass secrets via `env:` — never expand `${{ secrets.* }}` inside `run:`.
 - Raise exceptions from library code; log and handle them at the script layer.
-- Place all tests under `tests/` and ensure they run with `pytest`.
+- Place unit tests under `tests/unit/` and integration tests under `tests/integration/`.
+- Unit tests must not make any network calls — mock `db.get_client()` with `pytest-mock`.
+- Integration tests must use `SUPABASE_TEST_URL` / `SUPABASE_TEST_SERVICE_ROLE_KEY`, never the production credentials.
+- Always include `test_upsert_no_overwrite_dict_enabled` when implementing any importer.
+- Ensure `pytest tests/unit/` passes before touching integration tests.
+- **README.md must be updated in the same commit** whenever CLI flags, schema, workflows, or dependencies change. See the README.md section for which section to update.
+- All commit messages must follow **Conventional Commits** format (`feat:`, `fix:`, `schema:`, `chore:`, `docs:`, `test:`, `refactor:`). This drives automatic CHANGELOG generation via git-cliff.
+- **Always use `pathlib.Path`** for file paths — never string concatenation with `/` or `\`.
+- **Always specify `encoding=`** when opening any file — never rely on the OS default.
+- Output files must use `newline="\n"` (LF) regardless of the host OS.

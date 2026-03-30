@@ -14,11 +14,9 @@ Supabaseに医療用語（SSKマスター・カスタム語）を保存し、Moz
 2. `.env.example` を `.env` にコピーして認証情報を入力
 3. 依存関係をインストール: `pip install -e ".[dev]"`
 4. Supabase プロジェクトにマイグレーションを適用 (`schema/migrations/` を順番に実行)
-   - **Supabase CLI のインストール**: `npm install -g supabase`
-   - **ログイン**: `supabase login`（ブラウザで認証）
-   - **プロジェクト作成またはリンク**: `supabase projects create <project-name> --db-pass <password>` または `supabase link --project-ref <ref>`
-   - **シークレット設定**: `supabase secrets set SUPABASE_URL=...`、`supabase secrets set SUPABASE_SERVICE_ROLE_KEY=...`
-   - **マイグレーション適用**: `cd schema/migrations && for f in *.sql; do supabase db remote commit -f $f && supabase db remote push; done`
+   - **ログイン**: `npx supabase login`（ブラウザで認証）
+   - **プロジェクトリンク**: `npx supabase link --project-ref <ref>`
+   - **マイグレーション適用**: `npx supabase db push`
 
 ## Importing SSK Masters
 

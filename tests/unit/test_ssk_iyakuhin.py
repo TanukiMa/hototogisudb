@@ -36,5 +36,7 @@ def test_ssk_iyakuhin_parse_row(tmp_path):
     record = mock_client.table.return_value.upsert.call_args[0][0][0]
     assert record["iyakuhin_code"] == "100000001"
     assert record["kanji_name"] == "アスピリン錠"
+    assert record["kana_name"] == "あすぴりんじょう"
     assert record["is_generic"] is False
     assert record["generic_name_label"] == "アスピリン錠100mg"
+    assert "dict_enabled" not in record, "dict_enabledはupsertペイロードに含めてはならない"

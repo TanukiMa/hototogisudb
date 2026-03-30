@@ -19,3 +19,9 @@ def test_normalize_reading_empty():
 
 def test_normalize_reading_mixed():
     assert normalize_reading("インスリンチュウシャ") == "いんすりんちゅうしゃ"
+
+
+def test_normalize_reading_non_kana_raises():
+    import pytest
+    with pytest.raises(ValueError):
+        normalize_reading("糖尿病")

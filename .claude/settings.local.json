@@ -17,7 +17,8 @@
       "Bash(python -m pytest tests/test_importers.py::test_base_importer_duplicate_detection -v)",
       "Bash(/home/vagrant/tmp/hototogisudb/venv/bin/python -m pytest tests/test_importers.py::test_base_importer_duplicate_detection -v 2>&1)",
       "Bash(git -C /home/vagrant/tmp/hototogisudb diff HEAD CLAUDE.md)",
-      "Bash(git -C /home/vagrant/tmp/hototogisudb diff CLAUDE.md)"
+      "Bash(git -C /home/vagrant/tmp/hototogisudb diff CLAUDE.md)",
+      "Skill(code-review:code-review)"
     ]
   }
 }

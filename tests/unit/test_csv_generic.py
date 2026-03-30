@@ -22,4 +22,4 @@ def test_csv_generic_importer(tmp_path):
     assert record["surface_form"] == "糖尿病手帳"
     assert record["reading"] == "とうにょうびょうてちょう"
     assert record["cost"] == 4800
-    assert record["dict_enabled"] is True
+    assert "dict_enabled" not in record, "dict_enabledはupsertペイロードに含めてはならない"

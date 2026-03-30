@@ -30,7 +30,9 @@ jobs:
         run: pip install -e .
 
       - name: Download master CSV
-        run: curl -fsSL "${{ inputs.file_url }}" -o master.csv
+        env:
+          FILE_URL: ${{ inputs.file_url }}
+        run: curl -fsSL "${FILE_URL}" -o master.csv
 
       - name: Import master
         env:

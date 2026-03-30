@@ -33,7 +33,6 @@ class CsvGenericImporter:
                     "source_label": row.get("source_label", "").strip() or source_label or None,
                     "source_url": row.get("source_url", "").strip() or None,
                     "notes": row.get("notes", "").strip() or None,
-                    "dict_enabled": True,
                 }
                 pos_raw = row.get("pos_type_id", "").strip()
                 if pos_raw:

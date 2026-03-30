@@ -12,10 +12,16 @@ def normalize_reading(text: str) -> str:
     text = text.replace("\u3000", "").strip()
     result = []
     for ch in text:
-        # カタカナ → ひらがな（U+30A1–U+30F6 → U+3041–U+3096）
         code = ord(ch)
+        # カタカナ → ひらがな（U+30A1–U+30F6 → U+3041–U+3096）
         if 0x30A1 <= code <= 0x30F6:
             result.append(chr(code - 0x60))
-        else:
+        elif 0x3041 <= code <= 0x3096:
+            # ひらがなはそのまま
             result.append(ch)
+        elif ch in ("ー", "・", "　"):
+            # 長音符・中点・全角スペースは許可（全角スペースは除去済みだが念のため）
+            result.append(ch)
+        else:
+            raise ValueError(f"非カナ文字が含まれています: {ch!r}")
     return "".join(result)

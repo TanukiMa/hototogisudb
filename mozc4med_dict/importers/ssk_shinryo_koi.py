@@ -4,6 +4,7 @@ from pathlib import Path
 
 from mozc4med_dict.db import get_client
 from mozc4med_dict.importers.base import BaseImporter
+from mozc4med_dict.utils.kana import normalize_reading
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class SskShinryoKoiImporter(BaseImporter):
                 record: dict = {
                     "shinryo_koi_code": row[_F_CODE].strip(),
                     "abbr_kanji_name": row[_F_ABBR_KANJI].strip() or None,
-                    "abbr_kana_name": row[_F_ABBR_KANA].strip() or None,
+                    "abbr_kana_name": normalize_reading(row[_F_ABBR_KANA].strip()) if row[_F_ABBR_KANA].strip() else None,
                     "base_kanji_name": row[_F_BASE_KANJI].strip() or None,
                     "change_type": change_type or None,
                     "changed_at": _parse_date(row[_F_CHANGED_AT]),

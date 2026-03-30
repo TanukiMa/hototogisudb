@@ -17,7 +17,6 @@ jobs:
       - run: mypy mozc4med_dict/
 
   unit-tests:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]

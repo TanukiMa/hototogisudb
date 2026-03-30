@@ -44,5 +44,6 @@ def test_ssk_shobyomei_parse_row(tmp_path):
     record = upsert_call[0][0][0]
     assert record["shobyomei_code"] == "1234567"
     assert record["base_name"] == "糖尿病"
-    assert record["kana_name"] == "トウニョウビョウ"
+    assert record["kana_name"] == "とうにょうびょう"
     assert record["is_active"] is True
+    assert "dict_enabled" not in record, "dict_enabledはupsertペイロードに含めてはならない"

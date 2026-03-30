@@ -12,6 +12,13 @@ def client() -> Client:
 
 
 @pytest.fixture(autouse=True)
+def use_test_db(monkeypatch: pytest.MonkeyPatch) -> None:
+    """db.get_client() がテスト用Supabaseを向くようにenv varを書き換える。"""
+    monkeypatch.setenv("SUPABASE_URL", os.environ["SUPABASE_TEST_URL"])
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", os.environ["SUPABASE_TEST_SERVICE_ROLE_KEY"])
+
+
+@pytest.fixture(autouse=True)
 def truncate_tables(client: Client) -> None:
     """Wipe all test data before each test for isolation."""
     for table in [

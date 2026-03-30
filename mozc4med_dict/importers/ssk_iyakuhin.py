@@ -8,6 +8,17 @@ from mozc4med_dict.utils.kana import normalize_reading
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_normalize(kana: str) -> str | None:
+    if not kana:
+        return None
+    try:
+        return normalize_reading(kana)
+    except ValueError as e:
+        logger.debug("カナ正規化スキップ %r: %s", kana, e)
+        return None
+
+
 _F_CHANGE_TYPE = 0
 _F_CODE = 2
 _F_KANJI_NAME = 4
@@ -45,7 +56,7 @@ class SskIyakuhinImporter(BaseImporter):
                 record: dict = {
                     "iyakuhin_code": row[_F_CODE].strip(),
                     "kanji_name": row[_F_KANJI_NAME].strip() or None,
-                    "kana_name": normalize_reading(row[_F_KANA_NAME].strip()) if row[_F_KANA_NAME].strip() else None,
+                    "kana_name": _safe_normalize(row[_F_KANA_NAME].strip()),
                     "base_kanji_name": row[_F_BASE_KANJI].strip() or None,
                     "generic_name_code": row[_F_GENERIC_CODE].strip() or None,
                     "generic_name_label": row[_F_GENERIC_LABEL].strip() or None,

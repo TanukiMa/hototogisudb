@@ -8,6 +8,17 @@ from mozc4med_dict.utils.kana import normalize_reading
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_normalize(kana: str) -> str | None:
+    if not kana:
+        return None
+    try:
+        return normalize_reading(kana)
+    except ValueError as e:
+        logger.debug("カナ正規化スキップ %r: %s", kana, e)
+        return None
+
+
 _F_CHANGE_TYPE = 0
 _F_CODE = 2
 _F_SUCCESSOR = 3
@@ -49,7 +60,7 @@ class SskShobyomeiImporter(BaseImporter):
                     "successor_code": row[_F_SUCCESSOR].strip() or None,
                     "base_name": row[_F_BASE_NAME].strip() or None,
                     "abbr_name": row[_F_ABBR_NAME].strip() or None,
-                    "kana_name": normalize_reading(row[_F_KANA_NAME].strip()) if row[_F_KANA_NAME].strip() else None,
+                    "kana_name": _safe_normalize(row[_F_KANA_NAME].strip()),
                     "byomei_mgmt_code": row[_F_MGMT_CODE].strip() or None,
                     "adoption_type": row[_F_ADOPTION].strip() or None,
                     "icd10_1": row[_F_ICD10_1].strip() or None,

@@ -39,7 +39,10 @@ def _parse_date(s: str) -> str | None:
     if not s or s == "0":
         return None
     if len(s) == 8:
-        return f"{s[:4]}-{s[4:6]}-{s[6:8]}"
+        year, month, day = s[:4], s[4:6], s[6:8]
+        if month == "99" or day == "99":
+            return None
+        return f"{year}-{month}-{day}"
     return None
 
 

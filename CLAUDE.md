@@ -61,14 +61,15 @@ mozc4med-dict/
 ├── dist/
 │   └── mozc4med_medical.txt        # Exported dictionary (committed back by GHA)
 │
-├── schema/
+├── supabase/
 │   └── migrations/
-│       ├── 001_create_pos_types.sql
-│       ├── 002_create_import_batches.sql
-│       ├── 003_create_ssk_shinryo_koi.sql
-│       ├── 004_create_ssk_iyakuhin.sql
-│       ├── 005_create_ssk_shobyomei.sql
-│       └── 006_create_custom_terms.sql
+│       ├── 20260101000001_create_pos_types.sql
+│       ├── 20260101000002_create_import_batches.sql
+│       ├── 20260101000003_create_ssk_shinryo_koi.sql
+│       ├── 20260101000004_create_ssk_iyakuhin.sql
+│       ├── 20260101000005_create_ssk_shobyomei.sql
+│       ├── 20260101000006_create_custom_terms.sql
+│       └── 20260101000007_create_export_rpc.sql
 │
 ├── mozc4med_dict/
 │   ├── __init__.py
@@ -739,7 +740,7 @@ Register alongside the production secrets in **Settings → Secrets and variable
 | `SUPABASE_TEST_URL` | `https://yyyy.supabase.co` | Dedicated test project URL |
 | `SUPABASE_TEST_SERVICE_ROLE_KEY` | `eyJ...` | Test project service role key |
 
-The test project schema must be kept in sync with `schema/migrations/`.
+The test project schema must be kept in sync with `supabase/migrations/`.
 Run all migrations against the test project whenever a new migration is added.
 
 ---
@@ -951,7 +952,7 @@ One-line description of the project.
 1. Clone the repository
 2. Copy `.env.example` to `.env` and fill in credentials
 3. Install dependencies: `pip install -e ".[dev]"`
-4. Apply migrations to your Supabase project (see `schema/migrations/`)
+4. Apply migrations to your Supabase project (see `supabase/migrations/`)
 
 ## Importing SSK Masters
 <!-- CLI usage for each import script with all flags -->
@@ -1215,7 +1216,7 @@ no need to triple the API quota consumption).
 5. Before importing, check `file_sha256` against `import_batches` to prevent duplicate imports.
 6. **Never hardcode credentials.** Always read from `os.environ`.
 7. Access SSK CSV fields as `row[field_no - 1]` (0-indexed, field numbers from the SSK PDF spec).
-8. Migrations live in `schema/migrations/` as numbered SQL files.
+8. Migrations live in `supabase/migrations/` as timestamp-prefixed SQL files (e.g. `20260101000001_create_pos_types.sql`).
 10. **Cross-platform**: use `pathlib.Path` for all paths, always specify `encoding=` explicitly, write output files with `newline="\n"`.
 11. Never use shell-specific syntax (`&&`, `export`, backticks) in Python code or documentation examples.
 

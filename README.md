@@ -13,7 +13,7 @@ Supabaseに医療用語（SSKマスター・カスタム語）を保存し、Moz
 1. リポジトリをクローン
 2. `.env.example` を `.env` にコピーして認証情報を入力
 3. 依存関係をインストール: `pip install -e ".[dev]"`
-4. Supabase プロジェクトにマイグレーションを適用 (`schema/migrations/` を順番に実行)
+4. Supabase プロジェクトにマイグレーションを適用 (`supabase/migrations/` を順番に実行)
    - **ログイン**: `npx supabase login`（ブラウザで認証）
    - **プロジェクトリンク**: `npx supabase link --project-ref <ref>`
    - **マイグレーション適用**: `npx supabase db push`

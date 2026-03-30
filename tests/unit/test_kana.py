@@ -25,3 +25,28 @@ def test_normalize_reading_non_kana_raises():
     import pytest
     with pytest.raises(ValueError):
         normalize_reading("糖尿病")
+
+
+def test_normalize_reading_halfwidth_katakana():
+    # 半角カナ → ひらがな
+    assert normalize_reading("ｼﾝﾘｮｳｺｳｲ") == "しんりょうこうい"
+
+
+def test_normalize_reading_halfwidth_dakuten():
+    # 半角カナ濁点結合
+    assert normalize_reading("ｼﾞｬｸﾋﾝ") == "じゃくひん"
+
+
+def test_normalize_reading_halfwidth_handakuten():
+    # 半角カナ半濁点結合
+    assert normalize_reading("ﾊﾟｰｷﾝｿﾝﾋﾞｮｳ") == "ぱーきんそんびょう"
+
+
+def test_normalize_reading_halfwidth_digits():
+    # 半角数字 → 全角数字
+    assert normalize_reading("ｲﾝｽﾘﾝ10ｴ") == "いんすりん１０え"
+
+
+def test_normalize_reading_fullwidth_digits():
+    # 全角数字はそのまま通過
+    assert normalize_reading("ｲﾝｽﾘﾝ１０ｴ") == "いんすりん１０え"

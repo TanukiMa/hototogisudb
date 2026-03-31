@@ -11,9 +11,9 @@ Dictionary export is automated via **GitHub Actions**, which commits the generat
 
 | Source | Master type | Provider |
 |---|---|---|
-| Medical procedure master (医科診療行為) | `S` | Social Insurance Medical Fee Payment Fund (SSK) |
-| Drug master (医薬品) | `Y` | Social Insurance Medical Fee Payment Fund (SSK) |
-| Disease/injury name master (傷病名) | `B` | Social Insurance Medical Fee Payment Fund (SSK) |
+| Medical procedure master (診療行為マスター) | `S` | Social Insurance Medical Fee Payment Fund (SSK) |
+| Drug master (医薬品マスター) | `Y` | Social Insurance Medical Fee Payment Fund (SSK) |
+| Disease/injury name master (傷病名マスター) | `B` | Social Insurance Medical Fee Payment Fund (SSK) |
 | Manual input / CSV import | — | Custom terms |
 
 **Common file specification (SSK masters)**:
@@ -47,7 +47,6 @@ mozc4med-dict/
 ├── pyproject.toml
 ├── .env.example             # Template for local dev (no secrets)
 ├── .env                     # Local secrets — gitignored
-│
 ├── .github/
 │   └── workflows/
 │       ├── export_mozc_dict.yml    # Dictionary export (main)
@@ -55,12 +54,9 @@ mozc4med-dict/
 │       ├── supabase_keepalive.yml  # Prevent Supabase free-tier freeze (daily ping)
 │       ├── ci.yml                  # CI: lint + unit tests + integration tests (on PR)
 │       └── update_changelog.yml    # Regenerate CHANGELOG.md via git-cliff (on push to main)
-│
 ├── cliff.toml                  # git-cliff configuration for CHANGELOG generation
-│
 ├── dist/
 │   └── mozc4med_medical.txt        # Exported dictionary (committed back by GHA)
-│
 ├── supabase/
 │   └── migrations/
 │       ├── 20260101000001_create_pos_types.sql
@@ -70,14 +66,13 @@ mozc4med-dict/
 │       ├── 20260101000005_create_ssk_shobyomei.sql
 │       ├── 20260101000006_create_custom_terms.sql
 │       └── 20260101000007_create_export_rpc.sql
-│
 ├── mozc4med_dict/
 │   ├── __init__.py
 │   ├── db.py                       # Supabase client (reads from env vars)
 │   ├── models.py
 │   ├── utils/
 │   │   ├── __init__.py
-│   │   └── kana.py                 # Katakana → hiragana conversion
+│   │   └── kana.py                 # Katakana → hiragana conversion (export-time only)
 │   ├── importers/
 │   │   ├── __init__.py
 │   │   ├── base.py                 # Base importer (batch registration logic)
@@ -88,7 +83,6 @@ mozc4med-dict/
 │   └── exporters/
 │       ├── __init__.py
 │       └── mozc_system_dict.py
-│
 ├── scripts/
 │   ├── import_shinryo_koi.py
 │   ├── import_iyakuhin.py
@@ -97,7 +91,6 @@ mozc4med-dict/
 │   ├── export_mozc_dict.py
 │   ├── manage_dict_enabled.py      # Inspect / toggle dict_enabled flags
 │   └── supabase_keepalive.py       # Supabase freeze-prevention ping
-│
 └── tests/
     ├── unit/
     │   ├── test_kana.py
@@ -249,7 +242,7 @@ CREATE TABLE pos_types (
     id          SERIAL PRIMARY KEY,
     left_id     INTEGER NOT NULL,
     right_id    INTEGER NOT NULL,
-    description TEXT    NOT NULL,   -- e.g. '名詞,固有名詞,一般'
+    description TEXT    NOT NULL,   -- e.g. '名詞固有名詞一般'
     category    TEXT,               -- 'disease' | 'drug' | 'procedure' | 'general'
     UNIQUE (left_id, right_id)
 );
@@ -308,7 +301,7 @@ CREATE TABLE ssk_shinryo_koi (
     id                  BIGSERIAL PRIMARY KEY,
     shinryo_koi_code    TEXT    NOT NULL UNIQUE,  -- 9-digit procedure code
     abbr_kanji_name     TEXT,                     -- Abbreviated kanji name (used as surface_form)
-    abbr_kana_name      TEXT,                     -- Abbreviated kana name (used to derive reading)
+    abbr_kana_name      TEXT,                     -- Abbreviated kana name (stored as-is; normalized at export)
     base_kanji_name     TEXT,                     -- Full kanji name (fallback for surface_form)
     change_type         TEXT,
     changed_at          DATE,
@@ -322,7 +315,7 @@ CREATE INDEX idx_ssk_shinryo_koi_dict  ON ssk_shinryo_koi(dict_enabled);
 CREATE INDEX idx_ssk_shinryo_koi_batch ON ssk_shinryo_koi(batch_id);
 ```
 
-**Dictionary conversion**: `surface_form` ← `abbr_kanji_name` → fallback `base_kanji_name` / `cost` = 5500
+**Dictionary conversion**: `surface_form` → `abbr_kanji_name` → fallback `base_kanji_name` / `cost` = 5500
 
 ---
 
@@ -334,7 +327,7 @@ CREATE INDEX idx_ssk_shinryo_koi_batch ON ssk_shinryo_koi(batch_id);
 | 3 | 医薬品コード | 9 | `iyakuhin_code` |
 | 5 | 漢字名称 | 32 | `kanji_name` |
 | 7 | カナ名称 | 20 | `kana_name` |
-| 17 | 後発品 | 1 | `is_generic` |
+| 17 | 後発品区分 | 1 | `is_generic` |
 | 30 | 変更年月日 | 8 | `changed_at` |
 | 31 | 廃止年月日 | 8 | `abolished_at` |
 | 35 | 基本漢字名称 | 100 | `base_kanji_name` |
@@ -346,7 +339,7 @@ CREATE TABLE ssk_iyakuhin (
     id                  BIGSERIAL PRIMARY KEY,
     iyakuhin_code       TEXT    NOT NULL UNIQUE,  -- 9-digit drug code
     kanji_name          TEXT,                     -- Brand name (surface_form)
-    kana_name           TEXT,                     -- Kana name (used to derive reading)
+    kana_name           TEXT,                     -- Kana name (stored as-is; normalized at export)
     base_kanji_name     TEXT,
     generic_name_code   TEXT,
     generic_name_label  TEXT,                     -- INN / standard generic prescription label
@@ -364,8 +357,7 @@ CREATE INDEX idx_ssk_iyakuhin_generic_code ON ssk_iyakuhin(generic_name_code);
 CREATE INDEX idx_ssk_iyakuhin_batch        ON ssk_iyakuhin(batch_id);
 ```
 
-**Dictionary conversion**: generates **two entries** per record —
-`kanji_name` (brand name) and `generic_name_label` (INN label).
+**Dictionary conversion**: generates **two entries** per record — `kanji_name` (brand name) and `generic_name_label` (INN label).
 `cost`: originator = 5000, generic (`is_generic=TRUE`) = 5200.
 
 ---
@@ -381,9 +373,9 @@ CREATE INDEX idx_ssk_iyakuhin_batch        ON ssk_iyakuhin(batch_id);
 | 8 | 傷病名省略名称 | 20 | `abbr_name` |
 | 10 | 傷病名カナ名称 | 50 | `kana_name` |
 | 11 | 病名管理番号 | 8 | `byomei_mgmt_code` |
-| 12 | 採択区分 | 1 | `adoption_type` |
-| 16 | ICD-10-1（2013） | 5 | `icd10_1` |
-| 17 | ICD-10-2（2013） | 5 | `icd10_2` |
+| 12 | 採用区分 | 1 | `adoption_type` |
+| 16 | ICD-10-1（2013年） | 5 | `icd10_1` |
+| 17 | ICD-10-2（2013年） | 5 | `icd10_2` |
 | 22 | 収載年月日 | 8 | `listed_at` |
 | 23 | 変更年月日 | 8 | `changed_at` |
 | 24 | 廃止年月日 | 8 | `abolished_at` |
@@ -395,7 +387,7 @@ CREATE TABLE ssk_shobyomei (
     successor_code      TEXT,                     -- Successor code when abolished
     base_name           TEXT,                     -- Full disease name (surface_form)
     abbr_name           TEXT,                     -- Abbreviated name (fallback)
-    kana_name           TEXT,                     -- Kana name (used to derive reading)
+    kana_name           TEXT,                     -- Kana name (stored as-is; normalized at export)
     byomei_mgmt_code    TEXT,                     -- MEDIS-DC linkage key
     adoption_type       TEXT,
     icd10_1             TEXT,
@@ -415,7 +407,7 @@ CREATE INDEX idx_ssk_shobyomei_mgmt  ON ssk_shobyomei(byomei_mgmt_code);
 CREATE INDEX idx_ssk_shobyomei_batch ON ssk_shobyomei(batch_id);
 ```
 
-**Dictionary conversion**: `surface_form` ← `base_name` → fallback `abbr_name` / `cost` = 4800 (highest priority)
+**Dictionary conversion**: `surface_form` → `base_name` → fallback `abbr_name` / `cost` = 4800 (highest priority)
 
 ---
 
@@ -445,6 +437,33 @@ CREATE TABLE custom_terms (
 ---
 
 ## Importer Specification
+
+### Character Encoding Policy
+
+**Import-time conversion: UTF-8 only. All other normalizations are deferred to export.**
+
+| Phase | What happens | What does NOT happen |
+|---|---|---|
+| **Import** | CP932 → UTF-8 conversion only | No kana normalization, no case folding |
+| **Export** | `normalize_reading()` converts DB value → hiragana | — |
+
+**Rationale**: SSK master kana fields contain mixed content in practice.
+Confirmed real-world examples:
+
+| Term | Kana field value | Content |
+|---|---|---|
+| 医療DX | `ｲﾘｮｳDX` | Half-width kana + ASCII uppercase |
+| 1型糖尿病 | `1ｶﾞﾀﾄｳﾆｮｳﾋﾞｮｳ` | ASCII digit + half-width dakuten kana |
+
+Storing the raw SSK value in the DB:
+- Preserves the original data for audit and academic citation
+- Avoids irreversible transformation at import time
+- Allows `normalize_reading()` logic to be improved without re-importing
+
+> **Column comment convention**: kana columns in SSK tables carry the comment
+> `"stored as-is (CP932→UTF-8 only); normalized to hiragana at export via normalize_reading()"`.
+
+---
 
 ### Batch Registration Flow (`importers/base.py`)
 
@@ -509,6 +528,70 @@ SELECT ... FROM custom_terms    WHERE dict_enabled = TRUE
 | ssk_iyakuhin (generic) | 5200 | |
 | ssk_shinryo_koi | 5500 | |
 | custom_terms | per-row value | Default 5000 |
+
+---
+
+## `utils/kana.py` — `normalize_reading()` Specification
+
+`normalize_reading()` is called **only at export time**, never at import time.
+It converts a raw kana field value (as stored in the DB) to a valid Mozc `reading`
+(hiragana only).
+
+### Conversion pipeline
+
+```
+Input (raw DB value)
+  │
+  ├─ 1. 全角カタカナ → 平仮名       unicodedata / str.translate
+  ├─ 2. 半角カナ（濁点合成含む）→ 全角カタカナ → 平仮名
+  │       例: ｶﾞ→ガ→が、ｲﾘｮｳ→イリョウ→いりょう
+  │
+  ├─ 3. 残留文字の処理（上記変換後も平仮名以外が残る場合）
+  │
+  │   ASCII 英字（例: DX, CT, MRI）
+  │     → WARNING ログ出力 + その TSV 行をスキップ（辞書に出力しない）
+  │     → 対象レコードに dict_enabled=FALSE は設定しない（DB は変更しない）
+  │
+  │   ASCII 数字（例: 1型糖尿病の "1"）
+  │     → WARNING ログ出力 + その TSV 行をスキップ
+  │     （Mozc の reading フィールドは平仮名のみ有効）
+  │
+  │   その他の非平仮名文字（記号・漢字等）
+  │     → ValueError を送出（呼び出し元でログ記録・スキップ）
+  │
+  └─ Output: 平仮名のみの文字列 or スキップ（TSV 未出力）
+```
+
+> **スキップ vs. ValueError の使い分け**
+> - 英字・数字残留: エクスポーターが WARNING ログを出して行をスキップ（`normalize_reading()` は値を返さず `None` を返す、またはエクスポーター側でフィルタ）
+> - 予期しない文字種: `ValueError` を送出して呼び出し元に委ねる
+
+### スキップされたエントリのログ形式
+
+```
+WARNING: skipped reading normalization: table=ssk_shobyomei code=XXXXXXX
+         raw_kana='ｲﾘｮｳDX' reason='residual_ascii_alpha'
+WARNING: skipped reading normalization: table=ssk_shobyomei code=XXXXXXX
+         raw_kana='1ｶﾞﾀﾄｳﾆｮｳﾋﾞｮｳ' reason='residual_ascii_digit'
+```
+
+スキップされたエントリ数はエクスポートスクリプトの終了時にサマリーとして出力する:
+
+```
+INFO: export complete: 42381 entries written, 17 entries skipped (see WARNING logs)
+```
+
+### Unit test cases for `kana.py`
+
+| Input | Expected output | Notes |
+|---|---|---|
+| `イリョウ` | `いりょう` | 全角カタカナ |
+| `ｲﾘｮｳ` | `いりょう` | 半角カナ |
+| `ｶﾞﾀ` | `がた` | 半角濁点合成 |
+| `1ｶﾞﾀﾄｳﾆｮｳﾋﾞｮｳ` | `None` (skip) | 数字残留（実確認例） |
+| `ｲﾘｮｳDX` | `None` (skip) | ASCII英字残留（実確認例） |
+| `漢字` | `ValueError` | 非カナ文字 |
+| `` (empty) | `ValueError` | 空文字列 |
 
 ---
 
@@ -781,12 +864,12 @@ Use `pytest` with `unittest.mock` or `pytest-mock` to stub out `db.get_client()`
 ```
 tests/
 ├── unit/
-│   ├── test_kana.py            # normalize_reading() edge cases
+│   ├── test_kana.py            # normalize_reading() edge cases (see table above)
 │   ├── test_importer_base.py   # SHA-256 dedup logic, change_type routing
 │   ├── test_ssk_shobyomei.py   # Field mapping (field_no → column)
 │   ├── test_ssk_iyakuhin.py    # Dual-entry generation (brand + INN)
 │   ├── test_ssk_shinryo_koi.py
-│   └── test_mozc_exporter.py   # TSV line format, cost values
+│   └── test_mozc_exporter.py   # TSV line format, cost values, skip-count logging
 └── integration/
     └── ...                     # see below
 ```
@@ -795,9 +878,9 @@ Key cases to cover in unit tests:
 
 | Module | What to test |
 |---|---|
-| `utils/kana.py` | Full-width katakana, half-width katakana, mixed input, non-kana raises `ValueError` |
+| `utils/kana.py` | 全角カタカナ、半角カナ（濁点合成含む）、`ｲﾘｮｳDX`→`None`、`1ｶﾞﾀ...`→`None`、漢字→`ValueError` |
 | `importers/base.py` | Duplicate SHA-256 aborts; `change_type=4` sets `is_active=False`; `dict_enabled` not touched on update |
-| `exporters/mozc_system_dict.py` | TSV format (`\t` delimited, 5 fields); correct cost per table; UTF-8 LF output |
+| `exporters/mozc_system_dict.py` | TSV format (`\t` delimited, 5 fields); correct cost per table; UTF-8 LF output; skipped entries logged with count |
 
 ```bash
 # Run unit tests only
@@ -820,7 +903,7 @@ tests/
     ├── test_import_shinryo_koi.py
     ├── test_upsert_no_overwrite_dict_enabled.py  # CRITICAL: dict_enabled must survive re-import
     ├── test_sha256_dedup.py     # Same file imported twice → second run aborts
-    └── test_export_pipeline.py  # DB → TSV output validation
+    └── test_export_pipeline.py  # DB → TSV output validation (including skip-count)
 ```
 
 `tests/integration/conftest.py` pattern:
@@ -899,6 +982,10 @@ jobs:
 
   unit-tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -959,6 +1046,7 @@ One-line description of the project.
 
 ## Exporting the Mozc Dictionary
 <!-- CLI usage for export_mozc_dict.py -->
+<!-- Note: entries with non-hiragana residual after normalization are skipped with WARNING log -->
 
 ## Managing dict_enabled
 <!-- CLI usage for manage_dict_enabled.py -->
@@ -968,6 +1056,7 @@ One-line description of the project.
 
 ## Database Schema
 <!-- Brief description of each table and the two-flag design -->
+<!-- Note: kana columns store raw SSK values (CP932→UTF-8 only); normalized at export -->
 
 ## GitHub Actions Workflows
 <!-- Table of all workflows, triggers, and purpose -->
@@ -986,6 +1075,7 @@ When modifying any of the following, README.md **must** be updated in the same c
 | New workflow or changed trigger | GitHub Actions Workflows section |
 | New dependency | Requirements / Setup sections |
 | Changed cost values or POS mapping | Database Schema section |
+| Changed normalize_reading() skip policy | Exporting section |
 
 ---
 
@@ -1001,13 +1091,13 @@ on every push to `main`, using commit messages that follow
 
 | Prefix | Meaning | Appears in CHANGELOG |
 |---|---|---|
-| `feat:` | New feature or importer/exporter | ✅ Features |
-| `fix:` | Bug fix | ✅ Bug Fixes |
-| `schema:` | Database migration added | ✅ Schema Changes |
-| `chore:` | Dictionary export, keep-alive, CI tweaks | ✅ Chores |
-| `docs:` | README or CHANGELOG update | ✅ Documentation |
-| `test:` | Test additions or fixes | ✅ Tests |
-| `refactor:` | Code restructure without behavior change | ✅ Refactor |
+| `feat:` | New feature or importer/exporter | ★ Features |
+| `fix:` | Bug fix | ★ Bug Fixes |
+| `schema:` | Database migration added | ★ Schema Changes |
+| `chore:` | Dictionary export, keep-alive, CI tweaks | ★ Chores |
+| `docs:` | README or CHANGELOG update | ★ Documentation |
+| `test:` | Test additions or fixes | ★ Tests |
+| `refactor:` | Code restructure without behavior change | ★ Refactor |
 
 Commit message examples:
 ```
@@ -1097,8 +1187,6 @@ jobs:
 | `supabase_keepalive.yml` | schedule (daily) | Prevent Supabase free-tier freeze |
 | `update_changelog.yml` | push to `main` | Regenerate CHANGELOG.md via git-cliff |
 
-Add `update_changelog.yml` to the `.github/workflows/` directory structure.
-
 ---
 
 ## Cross-Platform Compatibility
@@ -1111,10 +1199,10 @@ Never use string concatenation or hardcoded `/` separators for file paths.
 Always use `pathlib.Path`.
 
 ```python
-# ❌ Wrong
+# ✗ Wrong
 output = "dist/" + filename
 
-# ✅ Correct
+# ✓ Correct
 from pathlib import Path
 output = Path("dist") / filename
 ```
@@ -1146,7 +1234,7 @@ dist/mozc4med_medical.txt  text eol=lf
 SSK master CSVs are Shift-JIS. Always specify encoding explicitly — never rely on the OS default:
 
 ```python
-# ✅ Always explicit
+# ✓ Always explicit
 with open(csv_path, encoding="cp932") as f:
     ...
 ```
@@ -1190,35 +1278,22 @@ mozc4med-export             = "scripts.export_mozc_dict:main"
 mozc4med-keepalive          = "scripts.supabase_keepalive:main"
 ```
 
-### Platform Testing in CI
-
-The CI `unit-tests` job runs on all three platforms:
-
-```yaml
-# In ci.yml — unit-tests job
-strategy:
-  matrix:
-    os: [ubuntu-latest, macos-latest, windows-latest]
-runs-on: ${{ matrix.os }}
-```
-
-Integration tests run on `ubuntu-latest` only (Supabase API is platform-independent;
-no need to triple the API quota consumption).
-
 ---
 
 ## Development Rules
 
-1. **All `reading` values must be hiragana.** Always pass through `utils/kana.normalize_reading()`.
-2. **POS IDs must come from `id.def`.** Check `src/data/dictionary_oss/id.def` in the Mozc4med repo.
-3. Soft-delete only: use `dict_enabled=FALSE` to exclude terms. Never hard-delete rows.
-4. **Never include `dict_enabled` in the `ON CONFLICT DO UPDATE` clause of any UPSERT.**
-5. Before importing, check `file_sha256` against `import_batches` to prevent duplicate imports.
-6. **Never hardcode credentials.** Always read from `os.environ`.
-7. Access SSK CSV fields as `row[field_no - 1]` (0-indexed, field numbers from the SSK PDF spec).
-8. Migrations live in `supabase/migrations/` as timestamp-prefixed SQL files (e.g. `20260101000001_create_pos_types.sql`).
+1. **All `reading` values must be hiragana.** Always pass through `utils/kana.normalize_reading()` **at export time**.
+2. **Import-time encoding: UTF-8 conversion only.** Do not normalize kana, fold case, or strip characters at import. The DB stores the raw SSK value (CP932→UTF-8). Normalization is the exporter's responsibility.
+3. **POS IDs must come from `id.def`.** Check `src/data/dictionary_oss/id.def` in the Mozc4med repo.
+4. Soft-delete only: use `dict_enabled=FALSE` to exclude terms. Never hard-delete rows.
+5. **Never include `dict_enabled` in the `ON CONFLICT DO UPDATE` clause of any UPSERT.**
+6. Before importing, check `file_sha256` against `import_batches` to prevent duplicate imports.
+7. **Never hardcode credentials.** Always read from `os.environ`.
+8. Access SSK CSV fields as `row[field_no - 1]` (0-indexed, field numbers from the SSK PDF spec).
+9. Migrations live in `supabase/migrations/` as timestamp-prefixed SQL files (e.g. `20260101000001_create_pos_types.sql`).
 10. **Cross-platform**: use `pathlib.Path` for all paths, always specify `encoding=` explicitly, write output files with `newline="\n"`.
 11. Never use shell-specific syntax (`&&`, `export`, backticks) in Python code or documentation examples.
+12. **normalize_reading() skip policy**: if a kana field value contains residual ASCII alphabet or digits after half-width kana conversion, log a WARNING and skip that TSV line. Do not write an invalid reading to the dictionary. Do not set `dict_enabled=FALSE` in the DB (DB is not modified at export time).
 
 ---
 
@@ -1228,7 +1303,8 @@ no need to triple the API quota consumption).
 - Always access Supabase through `db.get_client()` — never instantiate the client directly.
 - Use **supabase-py** (`supabase.create_client`) for all DB operations. Do not use `psycopg2` or raw SQL strings. For queries too complex for the supabase-py builder (e.g. multi-table `UNION ALL`), use `client.rpc()` with a Postgres function.
 - Call `load_dotenv()` **once**, at the top of `db.py` only.
-- Always use `utils/kana.normalize_reading()` for kana conversion — never inline it.
+- **Importers perform CP932→UTF-8 conversion only.** Do not call `normalize_reading()` in any importer. Kana normalization happens exclusively in the exporter.
+- Always use `utils/kana.normalize_reading()` for kana conversion in the exporter — never inline it.
 - All importers must inherit from `importers/base.py` (batch registration is handled there).
 - **CRITICAL: Never add `dict_enabled` to the `ON CONFLICT DO UPDATE` SET clause.**
 - In GHA workflows, always pass secrets via `env:` — never expand `${{ secrets.* }}` inside `run:`.
@@ -1243,3 +1319,4 @@ no need to triple the API quota consumption).
 - **Always use `pathlib.Path`** for file paths — never string concatenation with `/` or `\`.
 - **Always specify `encoding=`** when opening any file — never rely on the OS default.
 - Output files must use `newline="\n"` (LF) regardless of the host OS.
+- When implementing `normalize_reading()`: half-width kana → full-width kana → hiragana is the primary path. Residual ASCII alpha/digit after conversion → return `None` and log WARNING at the exporter layer. Unexpected characters (kanji, symbols) → raise `ValueError`.

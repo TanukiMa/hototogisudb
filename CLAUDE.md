@@ -60,8 +60,8 @@ mozc4med-dict/
 │   ├── 20260101000004_create_ssk_iyakuhin.sql
 │   ├── 20260101000005_create_ssk_shobyomei.sql
 │   ├── 20260101000006_create_custom_terms.sql
-│   ├── 20260101000007_create_upsert_rpcs.sql   # per-table UPSERT functions (dict_enabled safe)
-│   └── 20260101000008_create_export_rpc.sql    # export_mozc_dict() UNION ALL function
+│   ├── 20260101000008_create_export_rpc.sql    # export_mozc_dict() UNION ALL function
+│   └── 20260101000009_create_upsert_rpcs.sql   # per-table UPSERT functions (dict_enabled safe)
 ├── mozc4med_dict/
 │   ├── __init__.py
 │   ├── db.py

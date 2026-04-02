@@ -40,7 +40,7 @@ def _parse_date(s: str) -> str | None:
 class SskShobyomeiImporter(BaseImporter):
     source_type = "ssk_shobyomei"
 
-    def _parse_rows(self, file_path: Path, batch_id: int) -> list[dict]:
+    def _parse(self, file_path: Path) -> list[dict]:
         rows = []
         with file_path.open(encoding="cp932", errors="replace", newline="") as f:
             reader = csv.reader(f)
@@ -64,7 +64,6 @@ class SskShobyomeiImporter(BaseImporter):
                     "changed_at": _parse_date(row[_F_CHANGED_AT]),
                     "abolished_at": _parse_date(row[_F_ABOLISHED_AT]),
                     "is_active": is_active,
-                    "batch_id": batch_id,
                 }
                 rows.append(record)
         return rows

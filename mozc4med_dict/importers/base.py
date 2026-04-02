@@ -14,12 +14,8 @@ class BaseImporter(ABC):
     source_type: str  # サブクラスで定義
 
     @abstractmethod
-    def _parse_rows(self, file_path: Path, batch_id: int) -> list[dict]:
+    def _parse(self, file_path: Path) -> list[dict]:
         """CSV を読み込んで upsert 用の dict リストを返す。"""
-
-    @abstractmethod
-    def _upsert_rows(self, rows: list[dict]) -> int:
-        """DB に upsert し、実際に処理した件数を返す。"""
 
     def _compute_sha256(self, file_path: Path) -> str:
         """Compute SHA-256 hash of file for duplicate detection."""
@@ -76,8 +72,9 @@ class BaseImporter(ABC):
         logger.info("Created import batch id=%d for %s", batch_id, file_path.name)
 
         # レコード処理
-        rows = self._parse_rows(file_path, batch_id)
-        count = self._upsert_rows(rows)
+        records = self._parse(file_path)
+        client.rpc(f"upsert_{self.source_type}", {"records": records, "p_batch_id": batch_id}).execute()
+        count = len(records)
 
         # record_count 更新
         client.table("import_batches").update({"record_count": count}).eq("id", batch_id).execute()

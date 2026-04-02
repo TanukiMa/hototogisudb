@@ -37,7 +37,7 @@ def _parse_date(s: str) -> str | None:
 class SskIyakuhinImporter(BaseImporter):
     source_type = "ssk_iyakuhin"
 
-    def _parse_rows(self, file_path: Path, batch_id: int) -> list[dict]:
+    def _parse(self, file_path: Path) -> list[dict]:
         rows = []
         with file_path.open(encoding="cp932", errors="replace", newline="") as f:
             reader = csv.reader(f)
@@ -59,17 +59,7 @@ class SskIyakuhinImporter(BaseImporter):
                     "changed_at": _parse_date(row[_F_CHANGED_AT]),
                     "abolished_at": _parse_date(row[_F_ABOLISHED_AT]),
                     "is_active": is_active,
-                    "batch_id": batch_id,
                 }
                 rows.append(record)
         return rows
 
-    def _upsert_rows(self, rows: list[dict]) -> int:
-        if not rows:
-            return 0
-        client = get_client()
-        client.table("ssk_iyakuhin").upsert(
-            rows,
-            on_conflict="iyakuhin_code",
-        ).execute()
-        return len(rows)

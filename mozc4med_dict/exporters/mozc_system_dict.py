@@ -18,7 +18,8 @@ class MozcSystemDictExporter:
         dry_run: bool = False,
     ) -> int:
         client = get_client()
-        result = client.rpc(_RPC_FUNCTION, {}).execute()
+        # Supabase RPC のデフォルトは 1000 行まで。全件取得するため limit=0 を指定
+        result = client.rpc(_RPC_FUNCTION, {"limit": 0}).execute()
         rows = result.data
 
         entries = [

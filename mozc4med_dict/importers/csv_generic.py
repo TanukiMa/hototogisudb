@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 
 from mozc4med_dict.db import get_client
-from mozc4med_dict.utils.kana import normalize_reading
+# 正規化はエクスポート時にのみ行うため、インポート時は生データを保持
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,8 @@ class CsvGenericImporter:
             reader = csv.DictReader(f)
             for row in reader:
                 cost_raw = row.get("cost", "").strip()
-                reading = normalize_reading(row.get("reading", "").strip())
+                # reading は生データを保持（正規化はエクスポート時に行う）
+                reading = row.get("reading", "").strip()
                 record: dict = {
                     "surface_form": row["surface_form"].strip(),
                     "reading": reading,

@@ -14,7 +14,9 @@ def test_normalize_reading_strips_whitespace():
 
 
 def test_normalize_reading_empty():
-    assert normalize_reading("") == ""
+    import pytest
+    with pytest.raises(ValueError):
+        normalize_reading("")
 
 
 def test_normalize_reading_mixed():
@@ -43,8 +45,8 @@ def test_normalize_reading_halfwidth_handakuten():
 
 
 def test_normalize_reading_halfwidth_digits():
-    # 半角数字 → 全角数字
-    assert normalize_reading("ｲﾝｽﾘﾝ10ｴ") == "いんすりん１０え"
+    # 半角数字はそのまま通す
+    assert normalize_reading("ｲﾝｽﾘﾝ10ｴ") == "いんすりん10え"
 
 
 def test_normalize_reading_fullwidth_digits():

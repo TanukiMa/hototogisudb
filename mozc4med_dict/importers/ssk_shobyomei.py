@@ -4,19 +4,10 @@ from pathlib import Path
 
 from mozc4med_dict.db import get_client
 from mozc4med_dict.importers.base import BaseImporter
-from mozc4med_dict.utils.kana import normalize_reading
-
-logger = logging.getLogger(__name__)
-
+# 正規化はエクスポート時にのみ行うため、インポート時は生データを保持
 
 def _safe_normalize(kana: str) -> str | None:
-    if not kana:
-        return None
-    try:
-        return normalize_reading(kana)
-    except ValueError as e:
-        logger.debug("カナ正規化スキップ %r: %s", kana, e)
-        return None
+    return kana or None
 
 
 _F_CHANGE_TYPE = 0

@@ -6,8 +6,10 @@ from supabase import Client, create_client
 
 @pytest.fixture(scope="session")
 def client() -> Client:
-    url = os.environ["SUPABASE_TEST_URL"]
-    key = os.environ["SUPABASE_TEST_SERVICE_ROLE_KEY"]
+    url = os.getenv("SUPABASE_TEST_URL")
+    key = os.getenv("SUPABASE_TEST_SERVICE_ROLE_KEY")
+    if not url or not key:
+        pytest.skip("Supabase test credentials not configured; skipping integration tests.")
     return create_client(url, key)
 
 

@@ -33,7 +33,8 @@ def test_ssk_shinryo_koi_parse_row(tmp_path):
     record = mock_client.table.return_value.upsert.call_args[0][0][0]
     assert record["shinryo_koi_code"] == "123456789"
     assert record["abbr_kanji_name"] == "初診料"
-    assert record["abbr_kana_name"] == "しょしんりょう"
+    # 正規化は行わず、生データがそのまま保存される
+    assert record["abbr_kana_name"] == "ショシンリョウ"
     assert record["base_kanji_name"] == "初診料（基本）"
     assert record["is_active"] is True
     assert "dict_enabled" not in record, "dict_enabledはupsertペイロードに含めてはならない"

@@ -1,31 +1,48 @@
 import jaconv
+try:
+    import alphabet2kana  # added for ASCII‑letter conversion
+except ImportError:  # pragma: no cover
+    alphabet2kana = None  # type: ignore
 
 
 def normalize_reading(text: str) -> str:
-    """カタカナ・半角カナ・全角スペースを正規化してひらがなに変換する。
+    """SSK から取得した kana カラムを Mozc 用に正規化する。
 
-    半角数字（0–9）は全角数字（０–９）に変換して通過させる。
+    変換フロー（仕様書 CLAUDE.md に記載）:
+    1. 半角カナ → 全角カタナ → 平仮名
+    2. ASCII 英字 → カタカナ → 平仮名
+    3. 半角数字は **そのまま**（半角数字のまま通す）
+    4. 許容文字はひらがな、半角数字、長音符「ー」、中点「・」
 
     Args:
-        text: 入力文字列（全角カタカナ・半角カナ・ひらがなの混合可）
+        text: SSK CSV から読み込んだ生文字列
 
     Returns:
-        ひらがな・全角数字に統一された文字列（全角スペースは除去）
+        正規化された文字列（ひらがな + 半角数字）
     """
-    text = text.strip().replace("\u3000", "").strip()
-    # 半角→全角（カナ・英数字・記号すべて）
-    text = jaconv.h2z(text, kana=True, digit=True, ascii=False)
-    # カタカナ→ひらがな
+    # 前後空白・全角スペース除去
+    text = text.strip().replace("\u3000", "")
+    if not text:
+        raise ValueError("empty reading")
+
+    # ① 半角カナ → 全角カタナ（数字はそのまま） → 平仮名
+    text = jaconv.h2z(text, kana=True, digit=False, ascii=False)
+    # ② ASCII 英字 → カタカナ → 平仮名（alphabet2kana が利用できない場合はスキップ）
+    if alphabet2kana is not None:
+        text = alphabet2kana.alphabet2kana(text)
+    # ③ カタカナ → 平仮名
     text = jaconv.kata2hira(text)
 
+    # 許容文字チェック（ひらがな、半角数字、全角数字、長音符・中点）
     for ch in text:
         code = ord(ch)
-        if 0x3041 <= code <= 0x3096:
-            pass  # ひらがな OK
-        elif 0xFF10 <= code <= 0xFF19:
-            pass  # 全角数字 OK
-        elif ch in ("ー", "・"):
-            pass  # 長音符・中点 OK
-        else:
-            raise ValueError(f"非カナ文字が含まれています: {ch!r}")
+        if 0x3041 <= code <= 0x3096:  # ひらがな
+            continue
+        if 0x30 <= code <= 0x39:       # 半角数字 0‑9
+            continue
+        if 0xFF10 <= code <= 0xFF19:   # 全角数字（互換性のため残す）
+            continue
+        if ch in ("ー", "・"):
+            continue
+        raise ValueError(f"非カナ文字が含まれています: {ch!r}")
     return text

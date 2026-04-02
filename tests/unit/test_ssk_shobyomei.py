@@ -40,10 +40,10 @@ def test_ssk_shobyomei_parse_row(tmp_path):
             )
 
     assert count == 1
-    upsert_call = mock_client.table.return_value.upsert.call_args
-    record = upsert_call[0][0][0]
+    record = mock_client.table.return_value.upsert.call_args[0][0][0]
     assert record["shobyomei_code"] == "1234567"
     assert record["base_name"] == "糖尿病"
-    assert record["kana_name"] == "とうにょうびょう"
+    # 正規化せず、生データが保存される
+    assert record["kana_name"] == "トウニョウビョウ"
     assert record["is_active"] is True
     assert "dict_enabled" not in record, "dict_enabledはupsertペイロードに含めてはならない"

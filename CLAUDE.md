@@ -145,6 +145,8 @@ dependencies = [
     "supabase>=2.0",        # supabase-py — Supabase Python client
     "python-dotenv>=1.0",
     "pydantic>=2.0",
+    "alphabet2kana>=1.0",   # ASCII [a-z][A-Z] → katakana (e.g. "DX" → "ディーエックス")
+    "jaconv>=0.3",          # Kana/character conversion (hankaku→zenkaku, kata→hira, etc.)
 ]
 
 [project.optional-dependencies]
@@ -542,44 +544,65 @@ It converts a raw kana field value (as stored in the DB) to a valid Mozc `readin
 ```
 Input (raw DB value)
   │
-  ├─ 1. 全角カタカナ → 平仮名       unicodedata / str.translate
+  ├─ 1. 全角カタカナ → 平仮名
+  │       jaconv.kata2hira()
+  │
   ├─ 2. 半角カナ（濁点合成含む）→ 全角カタカナ → 平仮名
+  │       jaconv.h2z(kana=True) → jaconv.kata2hira()
   │       例: ｶﾞ→ガ→が、ｲﾘｮｳ→イリョウ→いりょう
   │
-  ├─ 3. 残留文字の処理（上記変換後も平仮名以外が残る場合）
+  ├─ 3. ASCII [a-z][A-Z] → カタカナ → 平仮名
+  │       alphabet2kana.alphabet2kana() → jaconv.kata2hira()
+  │       例: DX→ディーエックス→でぃーえっくす
+  │           CT→シーティー→しーてぃー
   │
-  │   ASCII 英字（例: DX, CT, MRI）
-  │     → WARNING ログ出力 + その TSV 行をスキップ（辞書に出力しない）
-  │     → 対象レコードに dict_enabled=FALSE は設定しない（DB は変更しない）
+  ├─ 4. ASCII 数字 [0-9] → 半角数字のまま通す
+  │       Mozc の reading フィールドは半角数字を受け付けるため、Mozc 側に委ねる
+  │       例: 1ｶﾞﾀﾄｳﾆｮｳﾋﾞｮｳ → 1がたとうにょうびょう（"1" はそのまま）
   │
-  │   ASCII 数字（例: 1型糖尿病の "1"）
-  │     → WARNING ログ出力 + その TSV 行をスキップ
-  │     （Mozc の reading フィールドは平仮名のみ有効）
+  ├─ 5. その他の残留文字（漢字・記号・全角英数等）
+  │       → ValueError を送出（呼び出し元でログ記録・スキップ）
   │
-  │   その他の非平仮名文字（記号・漢字等）
-  │     → ValueError を送出（呼び出し元でログ記録・スキップ）
-  │
-  └─ Output: 平仮名のみの文字列 or スキップ（TSV 未出力）
+  └─ Output: 平仮名 + 半角数字 のみから成る文字列
 ```
 
-> **スキップ vs. ValueError の使い分け**
-> - 英字・数字残留: エクスポーターが WARNING ログを出して行をスキップ（`normalize_reading()` は値を返さず `None` を返す、またはエクスポーター側でフィルタ）
-> - 予期しない文字種: `ValueError` を送出して呼び出し元に委ねる
+### 実装スケッチ
 
-### スキップされたエントリのログ形式
+```python
+import jaconv
+import alphabet2kana
 
-```
-WARNING: skipped reading normalization: table=ssk_shobyomei code=XXXXXXX
-         raw_kana='ｲﾘｮｳDX' reason='residual_ascii_alpha'
-WARNING: skipped reading normalization: table=ssk_shobyomei code=XXXXXXX
-         raw_kana='1ｶﾞﾀﾄｳﾆｮｳﾋﾞｮｳ' reason='residual_ascii_digit'
+def normalize_reading(raw: str) -> str:
+    """
+    Convert a raw SSK kana field value to a Mozc-compatible reading string.
+
+    Accepted output characters: hiragana + ASCII digits [0-9].
+    Raises ValueError for any other residual characters (kanji, symbols, etc.).
+    """
+    if not raw:
+        raise ValueError("empty reading")
+
+    s = raw
+    # Step 1: 全角カタカナ → 平仮名
+    s = jaconv.kata2hira(s)
+    # Step 2: 半角カナ → 全角カタカナ → 平仮名
+    s = jaconv.kata2hira(jaconv.h2z(s, kana=True))
+    # Step 3: ASCII alpha → カタカナ → 平仮名
+    s = jaconv.kata2hira(alphabet2kana.alphabet2kana(s))
+    # Step 4: 残留チェック（平仮名 + 半角数字のみ許容）
+    import unicodedata
+    for ch in s:
+        if ch.isdigit() and ch.isascii():
+            continue  # 半角数字: pass through
+        if unicodedata.name(ch, "").startswith("HIRAGANA"):
+            continue
+        raise ValueError(f"unexpected character {ch!r} in reading {s!r} (raw={raw!r})")
+    return s
 ```
 
-スキップされたエントリ数はエクスポートスクリプトの終了時にサマリーとして出力する:
-
-```
-INFO: export complete: 42381 entries written, 17 entries skipped (see WARNING logs)
-```
+> ⚠️ `alphabet2kana` の変換結果はライブラリバージョンに依存するため、
+> ユニットテストでは具体的な平仮名文字列ではなく「平仮名 + 半角数字のみ」の検証を優先する。
+> 特定の変換結果（例: "DX" → "でぃーえっくす"）は回帰テストとして別途追加する。
 
 ### Unit test cases for `kana.py`
 
@@ -588,9 +611,9 @@ INFO: export complete: 42381 entries written, 17 entries skipped (see WARNING lo
 | `イリョウ` | `いりょう` | 全角カタカナ |
 | `ｲﾘｮｳ` | `いりょう` | 半角カナ |
 | `ｶﾞﾀ` | `がた` | 半角濁点合成 |
-| `1ｶﾞﾀﾄｳﾆｮｳﾋﾞｮｳ` | `None` (skip) | 数字残留（実確認例） |
-| `ｲﾘｮｳDX` | `None` (skip) | ASCII英字残留（実確認例） |
-| `漢字` | `ValueError` | 非カナ文字 |
+| `ｲﾘｮｳDX` | `いりょう` + hira("DX") | ASCII英字変換（実確認例） |
+| `1ｶﾞﾀﾄｳﾆｮｳﾋﾞｮｳ` | `"1がたとうにょうびょう"` | 数字はそのまま通す（実確認例） |
+| `漢字` | `ValueError` | 非カナ・非数字文字 |
 | `` (empty) | `ValueError` | 空文字列 |
 
 ---
@@ -878,7 +901,7 @@ Key cases to cover in unit tests:
 
 | Module | What to test |
 |---|---|
-| `utils/kana.py` | 全角カタカナ、半角カナ（濁点合成含む）、`ｲﾘｮｳDX`→`None`、`1ｶﾞﾀ...`→`None`、漢字→`ValueError` |
+| `utils/kana.py` | 全角カタカナ、半角カナ（濁点合成含む）、`ｲﾘｮｳDX`→平仮名変換、`1ｶﾞﾀ...`→数字+平仮名、漢字→`ValueError` |
 | `importers/base.py` | Duplicate SHA-256 aborts; `change_type=4` sets `is_active=False`; `dict_enabled` not touched on update |
 | `exporters/mozc_system_dict.py` | TSV format (`\t` delimited, 5 fields); correct cost per table; UTF-8 LF output; skipped entries logged with count |
 
@@ -1046,7 +1069,6 @@ One-line description of the project.
 
 ## Exporting the Mozc Dictionary
 <!-- CLI usage for export_mozc_dict.py -->
-<!-- Note: entries with non-hiragana residual after normalization are skipped with WARNING log -->
 
 ## Managing dict_enabled
 <!-- CLI usage for manage_dict_enabled.py -->
@@ -1056,7 +1078,7 @@ One-line description of the project.
 
 ## Database Schema
 <!-- Brief description of each table and the two-flag design -->
-<!-- Note: kana columns store raw SSK values (CP932→UTF-8 only); normalized at export -->
+<!-- Note: kana columns store raw SSK values (CP932→UTF-8 only); normalized at export via normalize_reading() using jaconv + alphabet2kana -->
 
 ## GitHub Actions Workflows
 <!-- Table of all workflows, triggers, and purpose -->
@@ -1075,7 +1097,7 @@ When modifying any of the following, README.md **must** be updated in the same c
 | New workflow or changed trigger | GitHub Actions Workflows section |
 | New dependency | Requirements / Setup sections |
 | Changed cost values or POS mapping | Database Schema section |
-| Changed normalize_reading() skip policy | Exporting section |
+| Changed normalize_reading() conversion policy | Exporting section |
 
 ---
 
@@ -1293,7 +1315,7 @@ mozc4med-keepalive          = "scripts.supabase_keepalive:main"
 9. Migrations live in `supabase/migrations/` as timestamp-prefixed SQL files (e.g. `20260101000001_create_pos_types.sql`).
 10. **Cross-platform**: use `pathlib.Path` for all paths, always specify `encoding=` explicitly, write output files with `newline="\n"`.
 11. Never use shell-specific syntax (`&&`, `export`, backticks) in Python code or documentation examples.
-12. **normalize_reading() skip policy**: if a kana field value contains residual ASCII alphabet or digits after half-width kana conversion, log a WARNING and skip that TSV line. Do not write an invalid reading to the dictionary. Do not set `dict_enabled=FALSE` in the DB (DB is not modified at export time).
+12. **normalize_reading() 変換ポリシー**: 半角カナ→全角カタカナ→平仮名（jaconv）、ASCII英字→カタカナ→平仮名（alphabet2kana + jaconv）、ASCII数字→半角数字のまま通す（Mozc側に委ねる）。漢字・記号等の予期しない文字は `ValueError` を送出する。
 
 ---
 
@@ -1319,4 +1341,4 @@ mozc4med-keepalive          = "scripts.supabase_keepalive:main"
 - **Always use `pathlib.Path`** for file paths — never string concatenation with `/` or `\`.
 - **Always specify `encoding=`** when opening any file — never rely on the OS default.
 - Output files must use `newline="\n"` (LF) regardless of the host OS.
-- When implementing `normalize_reading()`: half-width kana → full-width kana → hiragana is the primary path. Residual ASCII alpha/digit after conversion → return `None` and log WARNING at the exporter layer. Unexpected characters (kanji, symbols) → raise `ValueError`.
+- When implementing `normalize_reading()`: use `jaconv` for half-width kana → full-width kana → hiragana and kata→hira conversion; use `alphabet2kana` for ASCII [a-z][A-Z] → katakana, then convert to hiragana with `jaconv.kata2hira()`; ASCII digits [0-9] pass through unchanged; unexpected characters (kanji, symbols, full-width alphanumeric) → raise `ValueError`.

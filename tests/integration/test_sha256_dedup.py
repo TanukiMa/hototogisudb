@@ -3,9 +3,9 @@
 from pathlib import Path
 
 import pytest
-from supabase import Client
 
 from mozc4med_dict.importers.ssk_shobyomei import SskShobyomeiImporter
+from supabase import Client
 
 
 def _make_csv(tmp_path) -> Path:

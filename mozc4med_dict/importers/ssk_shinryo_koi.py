@@ -1,14 +1,9 @@
 import csv
-import logging
 from pathlib import Path
 
-from mozc4med_dict.db import get_client
 from mozc4med_dict.importers.base import BaseImporter
+
 # 正規化はエクスポート時にのみ行うため、インポート時は生データを保持
-
-def _safe_normalize(kana: str) -> str | None:
-    return kana or None
-
 
 _F_CHANGE_TYPE = 0
 _F_CODE = 2
@@ -34,7 +29,7 @@ def _parse_date(s: str) -> str | None:
 class SskShinryoKoiImporter(BaseImporter):
     source_type = "ssk_shinryo_koi"
 
-    def _parse_rows(self, file_path: Path, batch_id: int) -> list[dict]:
+    def _parse(self, file_path: Path) -> list[dict]:
         rows = []
         with file_path.open(encoding="cp932", errors="replace", newline="") as f:
             reader = csv.reader(f)
@@ -46,23 +41,12 @@ class SskShinryoKoiImporter(BaseImporter):
                 record: dict = {
                     "shinryo_koi_code": row[_F_CODE].strip(),
                     "abbr_kanji_name": row[_F_ABBR_KANJI].strip() or None,
-                    "abbr_kana_name": _safe_normalize(row[_F_ABBR_KANA].strip()),
+                    "abbr_kana_name": row[_F_ABBR_KANA].strip() or None,
                     "base_kanji_name": row[_F_BASE_KANJI].strip() or None,
                     "change_type": change_type or None,
                     "changed_at": _parse_date(row[_F_CHANGED_AT]),
                     "abolished_at": _parse_date(row[_F_ABOLISHED_AT]),
                     "is_active": is_active,
-                    "batch_id": batch_id,
                 }
                 rows.append(record)
         return rows
-
-    def _upsert_rows(self, rows: list[dict]) -> int:
-        if not rows:
-            return 0
-        client = get_client()
-        client.table("ssk_shinryo_koi").upsert(
-            rows,
-            on_conflict="shinryo_koi_code",
-        ).execute()
-        return len(rows)

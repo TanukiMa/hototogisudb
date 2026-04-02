@@ -1,14 +1,9 @@
 import csv
-import logging
 from pathlib import Path
 
-from mozc4med_dict.db import get_client
 from mozc4med_dict.importers.base import BaseImporter
+
 # 正規化はエクスポート時にのみ行うため、インポート時は生データを保持
-
-def _safe_normalize(kana: str) -> str | None:
-    return kana or None
-
 
 _F_CHANGE_TYPE = 0
 _F_CODE = 2
@@ -50,7 +45,7 @@ class SskIyakuhinImporter(BaseImporter):
                 record: dict = {
                     "iyakuhin_code": row[_F_CODE].strip(),
                     "kanji_name": row[_F_KANJI_NAME].strip() or None,
-                    "kana_name": _safe_normalize(row[_F_KANA_NAME].strip()),
+                    "kana_name": row[_F_KANA_NAME].strip() or None,
                     "base_kanji_name": row[_F_BASE_KANJI].strip() or None,
                     "generic_name_code": row[_F_GENERIC_CODE].strip() or None,
                     "generic_name_label": row[_F_GENERIC_LABEL].strip() or None,

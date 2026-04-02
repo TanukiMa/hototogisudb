@@ -1,4 +1,5 @@
 import jaconv
+
 try:
     import alphabet2kana  # added for ASCII‑letter conversion
 except ImportError:  # pragma: no cover

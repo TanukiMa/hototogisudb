@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mozc4med_dict.importers.ssk_iyakuhin import SskIyakuhinImporter
@@ -22,18 +21,20 @@ def test_ssk_iyakuhin_parse_row(tmp_path):
     csv_file.write_bytes(line + b"\r\n")
 
     mock_client = MagicMock()
-    mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
-    mock_client.table.return_value.insert.return_value.execute.return_value.data = [{"id": 55}]
-    mock_client.table.return_value.upsert.return_value.execute.return_value.data = [{}]
-    mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value.data = []
+    t = mock_client.table.return_value
+    t.select.return_value.eq.return_value.execute.return_value.data = []
+    t.insert.return_value.execute.return_value.data = [{"id": 55}]
+    t.update.return_value.eq.return_value.execute.return_value.data = []
+    mock_client.rpc.return_value.execute.return_value.data = [{}]
 
     with patch("mozc4med_dict.importers.base.get_client", return_value=mock_client):
-        with patch("mozc4med_dict.importers.ssk_iyakuhin.get_client", return_value=mock_client):
-            importer = SskIyakuhinImporter()
-            count = importer.run(file_path=csv_file, imported_by="test")
+        importer = SskIyakuhinImporter()
+        count = importer.run(file_path=csv_file, imported_by="test")
 
     assert count == 1
-    record = mock_client.table.return_value.upsert.call_args[0][0][0]
+    rpc_call = mock_client.rpc.call_args
+    assert rpc_call[0][0] == "upsert_ssk_iyakuhin"
+    record = rpc_call[0][1]["records"][0]
     assert record["iyakuhin_code"] == "100000001"
     assert record["kanji_name"] == "アスピリン錠"
     # 正規化せず、生データが保存される

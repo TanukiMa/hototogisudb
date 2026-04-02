@@ -1,12 +1,8 @@
 """Integration test: DB → TSV export pipeline."""
 
-from pathlib import Path
-
-import pytest
-from supabase import Client
 
 from mozc4med_dict.exporters.mozc_system_dict import MozcSystemDictExporter
-from mozc4med_dict.importers.ssk_shobyomei import SskShobyomeiImporter
+from supabase import Client
 
 
 def _insert_shobyomei(client: Client, code: str, base_name: str, kana: str) -> None:
@@ -52,7 +48,9 @@ def test_export_produces_tsv_lines(client: Client, tmp_path):
 def test_export_excludes_dict_disabled(client: Client, tmp_path):
     """dict_enabled=Falseのレコードはエクスポートされない。"""
     _insert_shobyomei(client, "1234567", "糖尿病", "とうにょうびょう")
-    client.table("ssk_shobyomei").update({"dict_enabled": False}).eq("shobyomei_code", "1234567").execute()
+    client.table("ssk_shobyomei").update({"dict_enabled": False}).eq(
+        "shobyomei_code", "1234567"
+    ).execute()
 
     output = tmp_path / "out.txt"
     exporter = MozcSystemDictExporter()

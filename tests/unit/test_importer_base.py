@@ -10,11 +10,8 @@ from mozc4med_dict.importers.base import BaseImporter
 class ConcreteImporter(BaseImporter):
     source_type = "test_source"
 
-    def _parse_rows(self, file_path: Path, batch_id: int) -> list[dict]:
+    def _parse(self, file_path: Path) -> list[dict]:
         return [{"key": "value"}]
-
-    def _upsert_rows(self, rows: list[dict]) -> int:
-        return len(rows)
 
 
 def test_base_importer_duplicate_detection(tmp_path):

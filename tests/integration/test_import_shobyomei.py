@@ -1,14 +1,12 @@
 """Integration test: SskShobyomeiImporter — CSV → DB round-trip."""
 
-import pytest
-from supabase import Client
+from pathlib import Path
 
 from mozc4med_dict.importers.ssk_shobyomei import SskShobyomeiImporter
+from supabase import Client
 
 
-def _make_csv(tmp_path, rows: list[list[str]]) -> "Path":
-    from pathlib import Path
-
+def _make_csv(tmp_path, rows: list[list[str]]) -> Path:
     path = tmp_path / "b_test.csv"
     lines = []
     for fields in rows:
@@ -42,7 +40,8 @@ def test_import_shobyomei_inserts_record(client: Client, tmp_path):
     rows = client.table("ssk_shobyomei").select("*").eq("shobyomei_code", "1234567").execute().data
     assert len(rows) == 1
     assert rows[0]["base_name"] == "糖尿病"
-    assert rows[0]["kana_name"] == "とうにょうびょう"
+    # インポート時は生データを保持（正規化はエクスポート時に行う）
+    assert rows[0]["kana_name"] == "トウニョウビョウ"
     assert rows[0]["is_active"] is True
     assert rows[0]["dict_enabled"] is True
 
@@ -55,5 +54,12 @@ def test_import_shobyomei_abolished_sets_inactive(client: Client, tmp_path):
     importer = SskShobyomeiImporter()
     importer.run(file_path=csv_file, imported_by="test")
 
-    row = client.table("ssk_shobyomei").select("is_active").eq("shobyomei_code", "1234567").single().execute().data
+    row = (
+        client.table("ssk_shobyomei")
+        .select("is_active")
+        .eq("shobyomei_code", "1234567")
+        .single()
+        .execute()
+        .data
+    )
     assert row["is_active"] is False

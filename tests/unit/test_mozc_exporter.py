@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mozc4med_dict.exporters.mozc_system_dict import MozcSystemDictExporter

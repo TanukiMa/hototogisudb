@@ -2,10 +2,8 @@
 
 from pathlib import Path
 
-import pytest
-from supabase import Client
-
 from mozc4med_dict.importers.ssk_iyakuhin import SskIyakuhinImporter
+from supabase import Client
 
 
 def _make_row(
@@ -42,7 +40,8 @@ def test_import_iyakuhin_inserts_record(client: Client, tmp_path):
     rows = client.table("ssk_iyakuhin").select("*").eq("iyakuhin_code", "100000001").execute().data
     assert len(rows) == 1
     assert rows[0]["kanji_name"] == "アスピリン錠"
-    assert rows[0]["kana_name"] == "あすぴりんじょう"
+    # インポート時は生データを保持（正規化はエクスポート時に行う）
+    assert rows[0]["kana_name"] == "アスピリンジョウ"
     assert rows[0]["is_active"] is True
     assert rows[0]["dict_enabled"] is True
 
@@ -52,5 +51,12 @@ def test_import_iyakuhin_generic_flag(client: Client, tmp_path):
     importer = SskIyakuhinImporter()
     importer.run(file_path=csv_file, imported_by="test")
 
-    row = client.table("ssk_iyakuhin").select("is_generic").eq("iyakuhin_code", "100000001").single().execute().data
+    row = (
+        client.table("ssk_iyakuhin")
+        .select("is_generic")
+        .eq("iyakuhin_code", "100000001")
+        .single()
+        .execute()
+        .data
+    )
     assert row["is_generic"] is True

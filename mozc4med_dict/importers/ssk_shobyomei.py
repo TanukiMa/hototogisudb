@@ -1,14 +1,9 @@
 import csv
-import logging
 from pathlib import Path
 
-from mozc4med_dict.db import get_client
 from mozc4med_dict.importers.base import BaseImporter
+
 # 正規化はエクスポート時にのみ行うため、インポート時は生データを保持
-
-def _safe_normalize(kana: str) -> str | None:
-    return kana or None
-
 
 _F_CHANGE_TYPE = 0
 _F_CODE = 2
@@ -54,7 +49,7 @@ class SskShobyomeiImporter(BaseImporter):
                     "successor_code": row[_F_SUCCESSOR].strip() or None,
                     "base_name": row[_F_BASE_NAME].strip() or None,
                     "abbr_name": row[_F_ABBR_NAME].strip() or None,
-                    "kana_name": _safe_normalize(row[_F_KANA_NAME].strip()),
+                    "kana_name": row[_F_KANA_NAME].strip() or None,
                     "byomei_mgmt_code": row[_F_MGMT_CODE].strip() or None,
                     "adoption_type": row[_F_ADOPTION].strip() or None,
                     "icd10_1": row[_F_ICD10_1].strip() or None,
@@ -68,12 +63,3 @@ class SskShobyomeiImporter(BaseImporter):
                 rows.append(record)
         return rows
 
-    def _upsert_rows(self, rows: list[dict]) -> int:
-        if not rows:
-            return 0
-        client = get_client()
-        client.table("ssk_shobyomei").upsert(
-            rows,
-            on_conflict="shobyomei_code",
-        ).execute()
-        return len(rows)

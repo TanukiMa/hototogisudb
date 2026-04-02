@@ -2,10 +2,8 @@
 
 from pathlib import Path
 
-import pytest
-from supabase import Client
-
 from mozc4med_dict.importers.ssk_shinryo_koi import SskShinryoKoiImporter
+from supabase import Client
 
 
 def _make_row(
@@ -38,10 +36,17 @@ def test_import_shinryo_koi_inserts_record(client: Client, tmp_path):
     count = importer.run(file_path=csv_file, imported_by="test")
 
     assert count == 1
-    rows = client.table("ssk_shinryo_koi").select("*").eq("shinryo_koi_code", "123456789").execute().data
+    rows = (
+        client.table("ssk_shinryo_koi")
+        .select("*")
+        .eq("shinryo_koi_code", "123456789")
+        .execute()
+        .data
+    )
     assert len(rows) == 1
     assert rows[0]["abbr_kanji_name"] == "初診料"
-    assert rows[0]["abbr_kana_name"] == "しょしんりょう"
+    # インポート時は生データを保持（正規化はエクスポート時に行う）
+    assert rows[0]["abbr_kana_name"] == "ショシンリョウ"
     assert rows[0]["is_active"] is True
     assert rows[0]["dict_enabled"] is True
 

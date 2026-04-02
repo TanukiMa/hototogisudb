@@ -73,7 +73,9 @@ class BaseImporter(ABC):
 
         # レコード処理
         records = self._parse(file_path)
-        client.rpc(f"upsert_{self.source_type}", {"records": records, "p_batch_id": batch_id}).execute()
+        client.rpc(
+            f"upsert_{self.source_type}", {"records": records, "p_batch_id": batch_id}
+        ).execute()
         count = len(records)
 
         # record_count 更新

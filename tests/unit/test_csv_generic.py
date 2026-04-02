@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mozc4med_dict.importers.csv_generic import CsvGenericImporter

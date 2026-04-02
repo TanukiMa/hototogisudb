@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 from mozc4med_dict.db import get_client
+
 # 正規化はエクスポート時にのみ行うため、インポート時は生データを保持
 
 logger = logging.getLogger(__name__)

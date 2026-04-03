@@ -28,9 +28,10 @@ def test_exporter_generates_tsv(tmp_path):
 
     with patch("mozc4med_dict.exporters.mozc_system_dict.get_client", return_value=mock_client):
         exporter = MozcSystemDictExporter()
-        count = exporter.export(output_path=out_file)
+        written, skipped = exporter.export(output_path=out_file)
 
-    assert count == 2
+    assert written == 2
+    assert skipped == 0
     lines = out_file.read_text(encoding="utf-8").splitlines()
     assert lines[0] == "とうにょうびょう\t1849\t1849\t4800\t糖尿病"
     assert lines[1] == "あすぴりん\t1849\t1849\t5000\tアスピリン"
@@ -54,7 +55,8 @@ def test_exporter_dry_run(tmp_path):
 
     with patch("mozc4med_dict.exporters.mozc_system_dict.get_client", return_value=mock_client):
         exporter = MozcSystemDictExporter()
-        count = exporter.export(output_path=out_file, dry_run=True)
+        written, skipped = exporter.export(output_path=out_file, dry_run=True)
 
-    assert count == 1
+    assert written == 1
+    assert skipped == 0
     assert not out_file.exists()

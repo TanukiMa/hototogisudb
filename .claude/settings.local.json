@@ -25,7 +25,8 @@
       "Bash(cp schema/migrations/003_create_ssk_shinryo_koi.sql supabase/migrations/20260101000003_create_ssk_shinryo_koi.sql)",
       "Bash(cp schema/migrations/004_create_ssk_iyakuhin.sql supabase/migrations/20260101000004_create_ssk_iyakuhin.sql)",
       "Bash(python:*)",
-      "Skill(claude-md-management:revise-claude-md)"
+      "Skill(claude-md-management:revise-claude-md)",
+      "Bash(pytest tests/unit/ -v --tb=short)"
     ]
   }
 }

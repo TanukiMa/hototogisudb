@@ -1,5 +1,5 @@
 import jaconv
-import alphabet2kana
+from alphabet2kana import a2k as _alphabet2kana
 
 
 def normalize_reading(text: str) -> str:
@@ -26,7 +26,7 @@ def normalize_reading(text: str) -> str:
     # ① 半角カナ → 全角カタナ（数字はそのまま） → 平仮名
     text = jaconv.h2z(text, kana=True, digit=False, ascii=False)
     # ② ASCII 英字 → カタカナ → 平仮名
-    text = alphabet2kana.alphabet2kana(text)
+    text = _alphabet2kana(text)
     # ③ カタカナ → 平仮名
     text = jaconv.kata2hira(text)
 

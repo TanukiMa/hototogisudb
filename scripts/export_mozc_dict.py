@@ -15,11 +15,11 @@ def main() -> None:
     args = parser.parse_args()
 
     exporter = MozcSystemDictExporter()
-    count = exporter.export(output_path=args.output, dry_run=args.dry_run)
+    written, skipped = exporter.export(output_path=args.output, dry_run=args.dry_run)
     if args.dry_run:
-        logging.info("Dry-run: %d entries would be exported", count)
+        logging.info("Dry-run: %d entries would be exported", written)
     else:
-        logging.info("Exported %d entries to %s", count, args.output)
+        logging.info("Exported %d entries to %s (%d skipped)", written, args.output, skipped)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,8 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from supabase import Client
+
 from mozc4med_dict.db import get_client
 
 logger = logging.getLogger(__name__)
@@ -16,6 +18,20 @@ class BaseImporter(ABC):
     @abstractmethod
     def _parse(self, file_path: Path) -> list[dict]:
         """CSV を読み込んで upsert 用の dict リストを返す。"""
+
+    def _abort_if_duplicate(self, client: Client, file_name: str, sha256: str) -> None:
+        """Raise ValueError if this file was already imported (SHA-256 match)."""
+        existing = (
+            client.table("import_batches")
+            .select("id")
+            .eq("file_sha256", sha256)
+            .execute()
+        )
+        if existing.data:
+            raise ValueError(
+                f"File {file_name} (sha256={sha256}) was already imported "
+                f"(batch_id={existing.data[0]['id']})"
+            )
 
     def _compute_sha256(self, file_path: Path) -> str:
         """Compute SHA-256 hash of file for duplicate detection."""
@@ -44,19 +60,7 @@ class BaseImporter(ABC):
         """
         client = get_client()
         sha256 = self._compute_sha256(file_path)
-
-        # 重複インポート防止
-        existing = (
-            client.table("import_batches")
-            .select("id")
-            .eq("file_sha256", sha256)
-            .execute()
-        )
-        if existing.data:
-            raise ValueError(
-                f"File {file_path.name} (sha256={sha256}) was already imported "
-                f"(batch_id={existing.data[0]['id']})"
-            )
+        self._abort_if_duplicate(client, file_path.name, sha256)
 
         # バッチ登録
         batch_row = {

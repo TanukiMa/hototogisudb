@@ -12,7 +12,7 @@ on:
           - iyakuhin
           - shobyomei
       file_url:
-        description: 'Direct URL to the full CSV file (from SSK ZIP)'
+        description: 'URL to ZIP or CSV file (https:// or file://)'
         required: true
         type: string
 
@@ -29,19 +29,11 @@ jobs:
       - name: Install dependencies
         run: pip install -e .
 
-      - name: Download master CSV
-        env:
-          FILE_URL: ${{ inputs.file_url }}
-        run: curl -fsSL "${FILE_URL}" -o master.csv
-
       - name: Import master
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          FILE_URL: ${{ inputs.file_url }}
-          MASTER_TYPE: ${{ inputs.master_type }}
         run: |
-          python scripts/import_${MASTER_TYPE}.py \
-            --file master.csv \
-            --url "${FILE_URL}" \
+          python scripts/import_${{ inputs.master_type }}.py \
+            --url "${{ inputs.file_url }}" \
             --imported-by "github-actions"

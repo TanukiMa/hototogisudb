@@ -45,9 +45,6 @@ class CsvGenericImporter:
             return 0
 
         client = get_client()
-        client.table("custom_terms").upsert(
-            rows,
-            on_conflict="surface_form,reading",
-        ).execute()
+        client.rpc("upsert_custom_terms", {"records": rows}).execute()
         logger.info("Imported %d custom terms", len(rows))
         return len(rows)

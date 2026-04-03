@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import Any
 
 from mozc4med_dict.db import get_client
 from mozc4med_dict.models import MozcDictEntry
@@ -13,6 +14,47 @@ _RPC_FUNCTION = "export_mozc_dict_entries"
 class MozcSystemDictExporter:
     """全テーブルの dict_enabled=TRUE エントリを Mozc 辞書 TSV に出力する。"""
 
+    @staticmethod
+    def _rows_from_rpc(data: object) -> list[dict[str, Any]]:
+        if data is None:
+            return []
+        if not isinstance(data, list):
+            raise ValueError(f"Export RPC returned unexpected payload type: {type(data).__name__}")
+        rows: list[dict[str, Any]] = []
+        for index, item in enumerate(data):
+            if not isinstance(item, dict):
+                raise ValueError(f"Export RPC row[{index}] is not an object")
+            rows.append(item)
+        return rows
+
+    @staticmethod
+    def _build_entry(row: dict[str, Any]) -> MozcDictEntry:
+        reading_raw = row.get("reading")
+        if not isinstance(reading_raw, str):
+            raise ValueError(f"Invalid reading value: {reading_raw!r}")
+        reading = normalize_reading(reading_raw)
+
+        left_id = row.get("left_id")
+        right_id = row.get("right_id")
+        cost = row.get("cost")
+        surface_form = row.get("surface_form")
+        if not isinstance(left_id, int):
+            raise ValueError(f"Invalid left_id value: {left_id!r}")
+        if not isinstance(right_id, int):
+            raise ValueError(f"Invalid right_id value: {right_id!r}")
+        if not isinstance(cost, int):
+            raise ValueError(f"Invalid cost value: {cost!r}")
+        if not isinstance(surface_form, str):
+            raise ValueError(f"Invalid surface_form value: {surface_form!r}")
+
+        return MozcDictEntry(
+            reading=reading,
+            left_id=left_id,
+            right_id=right_id,
+            cost=cost,
+            surface_form=surface_form,
+        )
+
     def export(
         self,
         output_path: Path,
@@ -22,7 +64,7 @@ class MozcSystemDictExporter:
         client = get_client()
         # Supabase RPC のデフォルトは 1000 行まで。全件取得するため limit=0 を指定
         result = client.rpc(_RPC_FUNCTION, {"limit": 0}).execute()
-        rows = result.data
+        rows = self._rows_from_rpc(result.data)
 
         logger.info("Fetched %d entries from DB", len(rows))
 
@@ -35,18 +77,12 @@ class MozcSystemDictExporter:
         with output_path.open("w", encoding="utf-8", newline="\n") as f:
             for r in rows:
                 try:
-                    reading = normalize_reading(r["reading"])
+                    entry = self._build_entry(r)
                 except ValueError as e:
-                    logger.warning("skipped: %s (surface=%s)", e, r["surface_form"])
+                    surface = r.get("surface_form")
+                    logger.warning("skipped: %s (surface=%s)", e, surface)
                     skipped += 1
                     continue
-                entry = MozcDictEntry(
-                    reading=reading,
-                    left_id=r["left_id"],
-                    right_id=r["right_id"],
-                    cost=r["cost"],
-                    surface_form=r["surface_form"],
-                )
                 f.write(entry.to_tsv_line() + "\n")
                 written += 1
 

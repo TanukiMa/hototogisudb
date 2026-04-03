@@ -6,7 +6,7 @@ dependencies = [
     "supabase>=2.0",
     "python-dotenv>=1.0",
     "pydantic>=2.0",
-    "alphabet2kana>=1.0",   # ASCII [a-z][A-Z] → katakana ("DX" → "ディーエックス")
+    "alphabet2kana==0.1.7", # ASCII [a-z][A-Z] → katakana ("DX" → "ディーエックス")
     "jaconv>=0.3",          # Kana conversion: hankaku→zenkaku, kata→hira
 ]
 

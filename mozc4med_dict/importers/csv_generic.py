@@ -1,6 +1,7 @@
 import csv
 import logging
 from pathlib import Path
+from typing import Any
 
 from mozc4med_dict.db import get_client
 
@@ -21,14 +22,14 @@ class CsvGenericImporter:
         file_path: Path,
         source_label: str | None = None,
     ) -> int:
-        rows = []
+        rows: list[dict[str, Any]] = []
         with file_path.open(encoding="utf-8", newline="") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 cost_raw = row.get("cost", "").strip()
                 # reading は生データを保持（正規化はエクスポート時に行う）
                 reading = row.get("reading", "").strip()
-                record: dict = {
+                record: dict[str, Any] = {
                     "surface_form": row["surface_form"].strip(),
                     "reading": reading,
                     "cost": int(cost_raw) if cost_raw else 5000,

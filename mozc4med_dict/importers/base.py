@@ -3,9 +3,8 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from supabase import Client
-
 from mozc4med_dict.db import get_client
+from supabase import Client
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +15,25 @@ class BaseImporter(ABC):
     source_type: str  # サブクラスで定義
 
     @abstractmethod
-    def _parse(self, file_path: Path) -> list[dict]:
+    def _parse(self, file_path: Path) -> list[dict[str, object]]:
         """CSV を読み込んで upsert 用の dict リストを返す。"""
+
+    def _rows_from_response(
+        self, data: object, *, context: str, allow_none: bool = False
+    ) -> list[dict[str, object]]:
+        if data is None:
+            if allow_none:
+                return []
+            raise ValueError(f"{context} returned no data")
+        if not isinstance(data, list):
+            raise ValueError(f"{context} returned unexpected payload type: {type(data).__name__}")
+
+        rows: list[dict[str, object]] = []
+        for index, item in enumerate(data):
+            if not isinstance(item, dict):
+                raise ValueError(f"{context} row[{index}] is not an object")
+            rows.append(item)
+        return rows
 
     def _abort_if_duplicate(self, client: Client, file_name: str, sha256: str) -> None:
         """Raise ValueError if this file was already imported (SHA-256 match)."""
@@ -27,10 +43,14 @@ class BaseImporter(ABC):
             .eq("file_sha256", sha256)
             .execute()
         )
-        if existing.data:
+        existing_rows = self._rows_from_response(
+            existing.data, context="import_batches duplicate check", allow_none=True
+        )
+        if existing_rows:
+            existing_id = existing_rows[0].get("id")
             raise ValueError(
                 f"File {file_name} (sha256={sha256}) was already imported "
-                f"(batch_id={existing.data[0]['id']})"
+                f"(batch_id={existing_id})"
             )
 
     def _compute_sha256(self, file_path: Path) -> str:
@@ -63,7 +83,7 @@ class BaseImporter(ABC):
         self._abort_if_duplicate(client, file_path.name, sha256)
 
         # バッチ登録
-        batch_row = {
+        batch_row: dict[str, str | None] = {
             "source_type": self.source_type,
             "source_url": source_url,
             "file_name": file_path.name,
@@ -72,7 +92,13 @@ class BaseImporter(ABC):
             "notes": notes,
         }
         result = client.table("import_batches").insert(batch_row).execute()
-        batch_id: int = result.data[0]["id"]
+        inserted_rows = self._rows_from_response(result.data, context="import_batches insert")
+        if not inserted_rows:
+            raise ValueError("import_batches insert returned no rows")
+        raw_batch_id = inserted_rows[0].get("id")
+        if not isinstance(raw_batch_id, int):
+            raise ValueError(f"import_batches insert returned invalid id: {raw_batch_id!r}")
+        batch_id = raw_batch_id
         logger.info("Created import batch id=%d for %s", batch_id, file_path.name)
 
         # レコード処理

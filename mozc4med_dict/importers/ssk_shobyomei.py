@@ -1,5 +1,6 @@
 import csv
 from pathlib import Path
+from typing import Any
 
 from mozc4med_dict.importers.base import BaseImporter
 
@@ -35,8 +36,8 @@ def _parse_date(s: str) -> str | None:
 class SskShobyomeiImporter(BaseImporter):
     source_type = "ssk_shobyomei"
 
-    def _parse(self, file_path: Path) -> list[dict]:
-        rows = []
+    def _parse(self, file_path: Path) -> list[dict[str, object]]:
+        rows: list[dict[str, object]] = []
         with file_path.open(encoding="cp932", errors="replace", newline="") as f:
             reader = csv.reader(f)
             for row in reader:
@@ -44,7 +45,7 @@ class SskShobyomeiImporter(BaseImporter):
                     continue
                 change_type = row[_F_CHANGE_TYPE].strip()
                 is_active = change_type != "4"
-                record: dict = {
+                record: dict[str, Any] = {
                     "shobyomei_code": row[_F_CODE].strip(),
                     "successor_code": row[_F_SUCCESSOR].strip() or None,
                     "base_name": row[_F_BASE_NAME].strip() or None,
@@ -62,4 +63,3 @@ class SskShobyomeiImporter(BaseImporter):
                 }
                 rows.append(record)
         return rows
-

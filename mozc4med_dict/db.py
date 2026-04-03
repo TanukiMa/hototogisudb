@@ -1,6 +1,7 @@
 import os
 
 from dotenv import load_dotenv
+
 from supabase import Client, create_client
 
 # Load .env for local runs. On GHA, env vars are already injected.

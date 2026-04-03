@@ -19,6 +19,9 @@ Dictionary export is automated via **GitHub Actions**, which commits the generat
 **Common SSK file specification**: Shift-JIS (cp932), comma-delimited, numeric fields without leading zeros.
 Download page: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/
 
+**SSK distribution format**: ZIP archive containing a single CSV file.
+Filename convention: `s_ALL{YYYYMMDD}.csv` (shinryo_koi), `y_ALL{YYYYMMDD}.csv` (iyakuhin), `b_ALL{YYYYMMDD}.csv` (shobyomei).
+
 ### Output Format — Mozc System Dictionary
 
 ```
@@ -60,15 +63,16 @@ mozc4med-dict/
 │   ├── 20260101000004_create_ssk_iyakuhin.sql
 │   ├── 20260101000005_create_ssk_shobyomei.sql
 │   ├── 20260101000006_create_custom_terms.sql
-│   ├── 20260101000008_create_export_rpc.sql    # export_mozc_dict() UNION ALL function
-│   └── 20260101000009_create_upsert_rpcs.sql   # per-table UPSERT functions (dict_enabled safe)
+│   ├── 20260101000007_create_upsert_rpcs.sql   # per-table UPSERT functions (dict_enabled safe)
+│   └── 20260101000008_create_export_rpc.sql    # export_mozc_dict() UNION ALL function
 ├── mozc4med_dict/
 │   ├── __init__.py
 │   ├── db.py
 │   ├── models.py                   # Pydantic v2 models for SSK records
 │   ├── utils/
 │   │   ├── __init__.py
-│   │   └── kana.py                 # normalize_reading() — export-time only
+│   │   ├── kana.py                 # normalize_reading() — export-time only
+│   │   └── download.py             # resolve_csv() — URL→local CSV resolution
 │   ├── importers/
 │   │   ├── __init__.py
 │   │   ├── base.py                 # BaseImporter ABC
@@ -90,6 +94,7 @@ mozc4med-dict/
 └── tests/
     ├── unit/
     │   ├── test_kana.py
+    │   ├── test_download.py
     │   ├── test_importer_base.py
     │   ├── test_ssk_shobyomei.py
     │   ├── test_ssk_iyakuhin.py
@@ -248,9 +253,9 @@ Provenance is tracked at **batch level** (all records in one CSV share the same 
 CREATE TABLE import_batches (
     id            BIGSERIAL PRIMARY KEY,
     source_type   TEXT        NOT NULL,  -- 'ssk_shinryo_koi' | 'ssk_iyakuhin' | 'ssk_shobyomei' | 'custom_csv'
-    source_url    TEXT,                  -- e.g. https://www.ssk.or.jp/.../kihonmasta_07.html
-    file_name     TEXT        NOT NULL,  -- e.g. b_ALL20260325.csv
-    file_sha256   TEXT,                  -- SHA-256 of raw file
+    source_url    TEXT,                  -- e.g. https://www.ssk.or.jp/.../s_ALL20260401.zip
+    file_name     TEXT        NOT NULL,  -- e.g. s_ALL20260401.csv (extracted CSV name, not ZIP)
+    file_sha256   TEXT,                  -- SHA-256 of the CSV file (after ZIP extraction)
     record_count  INTEGER,
     imported_by   TEXT,                  -- username or 'github-actions'
     imported_at   TIMESTAMPTZ DEFAULT NOW(),
@@ -478,6 +483,71 @@ SSK kana fields contain mixed content in practice. Confirmed real-world examples
 | 1型糖尿病 | `1ｶﾞﾀﾄｳﾆｮｳﾋﾞｮｳ` | ASCII digit + half-width dakuten kana |
 
 Storing raw values preserves original data for audit/citation and allows `normalize_reading()` to be improved without re-importing.
+
+### URL Resolution & ZIP Extraction (`utils/download.py`)
+
+SSK masters are distributed as ZIP archives containing a single CSV file.
+The `resolve_csv()` context manager resolves a URL to a local CSV path transparently.
+
+```python
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Generator
+
+@contextmanager
+def resolve_csv(url: str, csv_glob: str = "*.csv") -> Generator[Path, None, None]:
+    """Resolve URL → local CSV path.  Cleans up temp files on exit.
+
+    Supported schemes:
+      - https:// / http:// → download ZIP, extract matching CSV
+      - file:// (ZIP)      → extract matching CSV to temp dir
+      - file:// (CSV)      → yield path directly (no temp dir)
+
+    Parameters:
+        url:       URL to ZIP or CSV (https://, http://, or file://)
+        csv_glob:  Glob pattern for CSV inside ZIP (e.g. "s_*.csv")
+
+    Raises:
+        DownloadError:    Network error, invalid ZIP, or no matching CSV
+        FileNotFoundError: file:// target does not exist
+        ValueError:        Unsupported scheme or file extension
+    """
+    ...
+```
+
+| URL scheme | Behaviour |
+|---|---|
+| `https://www.ssk.or.jp/.../s_ALL20260401.zip` | Download → extract → yield CSV |
+| `file:///path/to/s_ALL20260401.zip` | Extract → yield CSV |
+| `file:///path/to/s_ALL20260401.csv` | Yield directly (no extraction) |
+
+**csv_glob per master type**:
+
+| Script | csv_glob |
+|---|---|
+| `import_shinryo_koi.py` | `s_*.csv` |
+| `import_iyakuhin.py` | `y_*.csv` |
+| `import_shobyomei.py` | `b_*.csv` |
+
+**SHA-256** is computed on the **extracted CSV file** (not the ZIP), consistent with `BaseImporter._sha256()`.
+Temporary directories are cleaned up when the `with` block exits.
+
+**Script-layer usage** (all three SSK import scripts follow this pattern):
+
+```python
+from mozc4med_dict.utils.download import resolve_csv, DownloadError
+
+try:
+    with resolve_csv(args.url, csv_glob="s_*.csv") as csv_path:
+        importer = SskShinryoKoiImporter()
+        count = importer.run(csv_path, args.url, args.imported_by)
+except (DownloadError, FileNotFoundError, ValueError) as e:
+    logger.error("%s", e)
+    sys.exit(1)
+```
+
+> ⚠️ Download / extraction is handled at the **script layer** (rule 15).
+> `BaseImporter.run()` still receives a local `Path` — it does not know about URLs.
 
 ### `BaseImporter` Interface (`importers/base.py`)
 
@@ -789,7 +859,7 @@ def normalize_reading(raw: str) -> str:
 |---|---|---|
 | `ci.yml` | PR to `main` | Lint → unit tests → integration tests |
 | `export_mozc_dict.yml` | Weekly (Mon 02:00 UTC) + manual | Export dictionary, commit back |
-| `import_ssk_master.yml` | Manual only | Import SSK master CSV |
+| `import_ssk_master.yml` | Manual only | Import SSK master (ZIP download handled by script) |
 | `supabase_keepalive.yml` | Daily (00:00 UTC) | Prevent free-tier freeze |
 | `update_changelog.yml` | Push to `main` | Regenerate CHANGELOG.md via git-cliff |
 
@@ -880,7 +950,7 @@ on:
         type: choice
         options: [shinryo_koi, iyakuhin, shobyomei]
       file_url:
-        description: 'Direct URL to CSV file'
+        description: 'URL to ZIP or CSV file (https:// or file://)'
         required: true
         type: string
 jobs:
@@ -891,15 +961,17 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - run: pip install -e .
-      - run: curl -fsSL "${{ inputs.file_url }}" -o master.csv
       - name: Import
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           python scripts/import_${{ inputs.master_type }}.py \
-            --file master.csv --url "${{ inputs.file_url }}" --imported-by "github-actions"
+            --url "${{ inputs.file_url }}" --imported-by "github-actions"
 ```
+
+> Note: The script handles ZIP download and extraction internally via `resolve_csv()`.
+> No separate `curl` step is needed.
 
 ### `supabase_keepalive.yml`
 
@@ -958,10 +1030,19 @@ jobs:
 ## CLI Reference
 
 ```bash
-# Import SSK masters
-python scripts/import_shinryo_koi.py --file data/s_ALL20260325.csv --url "https://..."
-python scripts/import_iyakuhin.py    --file data/y_ALL20260325.csv --url "https://..."
-python scripts/import_shobyomei.py   --file data/b_ALL20260325.csv --url "https://..."
+# Import SSK masters (from https:// ZIP — primary usage)
+python scripts/import_shinryo_koi.py --url "https://www.ssk.or.jp/.../s_ALL20260401.zip"
+python scripts/import_iyakuhin.py    --url "https://www.ssk.or.jp/.../y_ALL20260401.zip"
+python scripts/import_shobyomei.py   --url "https://www.ssk.or.jp/.../b_ALL20260401.zip"
+
+# Import SSK masters (from local ZIP via file://)
+python scripts/import_shinryo_koi.py --url "file:///path/to/s_ALL20260401.zip"
+python scripts/import_iyakuhin.py    --url "file:///C:/Users/me/data/y_ALL20260401.zip"
+
+# Import SSK masters (from local CSV directly via file://)
+python scripts/import_shobyomei.py   --url "file:///path/to/b_ALL20260401.csv"
+
+# Import custom terms (unchanged — uses --file + --source)
 python scripts/import_csv.py         --file data/custom_terms.csv  --source "Custom terms v1"
 
 # Export
@@ -976,6 +1057,22 @@ python scripts/manage_dict_enabled.py --disable 123456789 --table shinryo_koi  #
 python scripts/manage_dict_enabled.py --disable 123456789 --table iyakuhin
 python scripts/manage_dict_enabled.py --enable  1234567
 ```
+
+**SSK import `--url` scheme support**:
+
+| Scheme | Target | Behaviour |
+|---|---|---|
+| `https://` / `http://` | ZIP | Download → extract CSV matching glob → import |
+| `file://` | ZIP | Extract CSV matching glob → import |
+| `file://` | CSV | Use directly → import |
+
+**csv_glob per master type** (automatic — no user configuration needed):
+
+| Script | csv_glob | Example match |
+|---|---|---|
+| `import_shinryo_koi.py` | `s_*.csv` | `s_ALL20260401.csv` |
+| `import_iyakuhin.py` | `y_*.csv` | `y_ALL20260401.csv` |
+| `import_shobyomei.py` | `b_*.csv` | `b_ALL20260401.csv` |
 
 `manage_dict_enabled.py` のコード長による自動判別:
 
@@ -1000,10 +1097,12 @@ pytest -v                      # all
 ### Unit Test Key Cases
 
 Unit tests must run with **no network access** — mock `db.get_client()` with `pytest-mock`.
+For `utils/download.py`, mock `urllib.request.urlopen` for `https://` tests.
 
 | Module | What to test |
 |---|---|
 | `utils/kana.py` | All cases in the normalize_reading() test table above |
+| `utils/download.py` | `file://` CSV direct; `file://` ZIP extract; `https://` download+extract (mock `urlopen`); glob no-match error; multiple CSV match error; invalid ZIP error; unsupported scheme error; Windows `file:///C:/` path parsing; URL-encoded paths |
 | `importers/base.py` | `_sha256()` correctness; `_abort_if_duplicate()` raises on existing hash; `change_type=4` → `is_active=False`; `dict_enabled` absent from `_parse()` output |
 | `exporters/mozc_system_dict.py` | TSV format (tab-delimited, 5 fields); correct cost per source; UTF-8 LF; `ValueError` rows skipped and counted |
 
@@ -1116,6 +1215,7 @@ All code must run on **Windows, macOS, and Linux** without modification.
   - SSK CSV input: `encoding="cp932"`
   - Dictionary output: `encoding="utf-8", newline="\n"` (force LF)
 - **CLI scripts**: `argparse` only — no shell syntax (`&&`, `export`, backticks)
+- **file:// URLs**: use `Path.as_uri()` for construction; `_url_to_local_path()` in `download.py` handles POSIX and Windows drive-letter paths
 
 `.gitattributes`:
 ```
@@ -1134,23 +1234,24 @@ dist/mozc4med_medical.txt  text eol=lf
 3. **`dict_enabled` は `DO UPDATE SET` に含めない。** Python 側でも設定しない。新規レコードへの `TRUE` 設定は RPC が行う。
 4. **Soft-delete only.** Use `dict_enabled=FALSE` to exclude. Never `DELETE` rows from SSK tables.
 5. **Credentials from `os.environ["KEY"]` only.** Never hardcode; never `os.getenv`.
-6. **SHA-256 dedup** is handled by `BaseImporter._abort_if_duplicate()` — never re-implement.
+6. **SHA-256 dedup** is handled by `BaseImporter._abort_if_duplicate()` — never re-implement. SHA-256 is computed on the **CSV file** (after ZIP extraction), not on the ZIP archive.
+7. **URL resolution is script-layer only.** `resolve_csv()` is called in `scripts/import_*.py`, never inside `BaseImporter` or its subclasses. `BaseImporter.run()` always receives a local `Path`.
 
 **Implementation rules**:
 
-7. All SSK importers subclass `BaseImporter` and implement only `_parse()`. Never re-implement `run()`, `_upsert()`, `_sha256()`, `_create_batch()` in a subclass.
-8. `custom_terms` の `reading` はインポート時に平仮名であることを前提とし、`normalize_reading()` を通さない。
-9. SSK fields: `row[field_no - 1]` (0-indexed; field numbers from SSK PDF spec).
-10. POS IDs: populate `pos_types` from `src/data/dictionary_oss/id.def`; export RPC looks up by `category` at runtime.
-11. Migrations: timestamp-prefixed SQL in `supabase/migrations/`; apply to test project on every addition.
-12. **Cross-platform**: `pathlib.Path`; explicit `encoding=`; `newline="\n"` for output files.
+8. All SSK importers subclass `BaseImporter` and implement only `_parse()`. Never re-implement `run()`, `_upsert()`, `_sha256()`, `_create_batch()` in a subclass.
+9. `custom_terms` の `reading` はインポート時に平仮名であることを前提とし、`normalize_reading()` を通さない。
+10. SSK fields: `row[field_no - 1]` (0-indexed; field numbers from SSK PDF spec).
+11. POS IDs: populate `pos_types` from `src/data/dictionary_oss/id.def`; export RPC looks up by `category` at runtime.
+12. Migrations: timestamp-prefixed SQL in `supabase/migrations/`; apply to test project on every addition.
+13. **Cross-platform**: `pathlib.Path`; explicit `encoding=`; `newline="\n"` for output files; `_url_to_local_path()` for `file://` URI parsing.
 
 **Process rules**:
 
-13. `load_dotenv()` once only, at top of `db.py`.
-14. In GHA workflows, secrets via `env:` only — never `${{ secrets.* }}` inside `run:`.
-15. Raise exceptions in library code; log and handle at the script layer.
-16. Run `pytest tests/unit/` before touching integration tests (no network in unit tests; mock `db.get_client()`).
-17. `test_upsert_no_overwrite_dict_enabled` must cover all three SSK importers.
-18. Update `README.md` in the same commit as any change in the README Maintenance table.
-19. All commit messages follow Conventional Commits (`feat:`, `fix:`, `schema:`, `chore:`, `docs:`, `test:`, `refactor:`).
+14. `load_dotenv()` once only, at top of `db.py`.
+15. In GHA workflows, secrets via `env:` only — never `${{ secrets.* }}` inside `run:`.
+16. Raise exceptions in library code; log and handle at the script layer.
+17. Run `pytest tests/unit/` before touching integration tests (no network in unit tests; mock `db.get_client()` and `urlopen`).
+18. `test_upsert_no_overwrite_dict_enabled` must cover all three SSK importers.
+19. Update `README.md` in the same commit as any change in the README Maintenance table.
+20. All commit messages follow Conventional Commits (`feat:`, `fix:`, `schema:`, `chore:`, `docs:`, `test:`, `refactor:`).

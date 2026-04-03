@@ -1,4 +1,4 @@
-supabase/.tmp
+supabase/.temp
 .env
 __pycache__/
 *.py[cod]

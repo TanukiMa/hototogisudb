@@ -1,3 +1,4 @@
+schema/
 supabase/.temp
 .env
 __pycache__/

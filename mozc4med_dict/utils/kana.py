@@ -1,9 +1,5 @@
 import jaconv
-
-try:
-    import alphabet2kana  # added for ASCII‑letter conversion
-except ImportError:  # pragma: no cover
-    alphabet2kana = None  # type: ignore
+import alphabet2kana
 
 
 def normalize_reading(text: str) -> str:
@@ -13,13 +9,14 @@ def normalize_reading(text: str) -> str:
     1. 半角カナ → 全角カタナ → 平仮名
     2. ASCII 英字 → カタカナ → 平仮名
     3. 半角数字は **そのまま**（半角数字のまま通す）
-    4. 許容文字はひらがな、半角数字、長音符「ー」、中点「・」
+    4. 長音符「ー」・中点「・」はそのまま通す
+    5. 許容文字はひらがな、半角数字、長音符、中点
 
     Args:
         text: SSK CSV から読み込んだ生文字列
 
     Returns:
-        正規化された文字列（ひらがな + 半角数字）
+        正規化された文字列（ひらがな + 半角数字 + ー・）
     """
     # 前後空白・全角スペース除去
     text = text.strip().replace("\u3000", "")
@@ -28,9 +25,8 @@ def normalize_reading(text: str) -> str:
 
     # ① 半角カナ → 全角カタナ（数字はそのまま） → 平仮名
     text = jaconv.h2z(text, kana=True, digit=False, ascii=False)
-    # ② ASCII 英字 → カタカナ → 平仮名（alphabet2kana が利用できない場合はスキップ）
-    if alphabet2kana is not None:
-        text = alphabet2kana.alphabet2kana(text)
+    # ② ASCII 英字 → カタカナ → 平仮名
+    text = alphabet2kana.alphabet2kana(text)
     # ③ カタカナ → 平仮名
     text = jaconv.kata2hira(text)
 

@@ -53,13 +53,17 @@ class BaseImporter(ABC):
                 f"(batch_id={existing_id})"
             )
 
-    def _compute_sha256(self, file_path: Path) -> str:
+    def _sha256(self, file_path: Path) -> str:
         """Compute SHA-256 hash of file for duplicate detection."""
         sha = hashlib.sha256()
         with file_path.open("rb") as f:
             for chunk in iter(lambda: f.read(65536), b""):
                 sha.update(chunk)
         return sha.hexdigest()
+
+    def _compute_sha256(self, file_path: Path) -> str:
+        """Backward-compatible alias of _sha256()."""
+        return self._sha256(file_path)
 
     def run(
         self,
@@ -79,7 +83,7 @@ class BaseImporter(ABC):
         Returns number of records imported.
         """
         client = get_client()
-        sha256 = self._compute_sha256(file_path)
+        sha256 = self._sha256(file_path)
         self._abort_if_duplicate(client, file_path.name, sha256)
 
         # バッチ登録

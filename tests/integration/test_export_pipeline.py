@@ -35,11 +35,12 @@ def test_export_produces_tsv_lines(client: Client, tmp_path):
 
     output = tmp_path / "out.txt"
     exporter = MozcSystemDictExporter()
-    count = exporter.export(output_path=output)
+    written, skipped = exporter.export(output_path=output)
 
-    assert count >= 1
+    assert written >= 1
+    assert skipped == 0
     lines = output.read_text(encoding="utf-8").splitlines()
-    assert len(lines) == count
+    assert len(lines) == written
     # TSV形式: reading\tleft_id\tright_id\tcost\tsurface_form
     fields = lines[0].split("\t")
     assert len(fields) == 5
@@ -54,9 +55,10 @@ def test_export_excludes_dict_disabled(client: Client, tmp_path):
 
     output = tmp_path / "out.txt"
     exporter = MozcSystemDictExporter()
-    count = exporter.export(output_path=output)
+    written, skipped = exporter.export(output_path=output)
 
-    assert count == 0
+    assert written == 0
+    assert skipped == 0
     assert output.read_text(encoding="utf-8") == ""
 
 
@@ -66,9 +68,10 @@ def test_export_dry_run_does_not_write_file(client: Client, tmp_path):
 
     output = tmp_path / "dry_out.txt"
     exporter = MozcSystemDictExporter()
-    count = exporter.export(output_path=output, dry_run=True)
+    written, skipped = exporter.export(output_path=output, dry_run=True)
 
-    assert count >= 1
+    assert written >= 1
+    assert skipped == 0
     assert not output.exists(), "dry_runではファイルを書き出してはならない"
 
 

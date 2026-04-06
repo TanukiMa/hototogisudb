@@ -168,7 +168,7 @@ surface_form,reading,cost,pos_category,source_url,notes
 def export(output: Path) -> tuple[int, int]:
     """Export dictionary TSV. Returns (written, skipped)."""
     client = get_client()
-    rows = client.rpc("export_mozc_dict", {"limit": 0}).execute().data  # ⚠️ default limit is 1000 rows; {"limit": 0} required for full export
+    rows = client.rpc("export_mozc_dict", {}).execute().data
     written = skipped = 0
     with open(output, "w", encoding="utf-8", newline="\n") as f:
         for row in rows:

@@ -59,8 +59,15 @@ mozc4med-export --output dist/mozc4med_medical.txt
 # 廃止済みだが辞書に残っている語一覧
 python scripts/manage_dict_enabled.py --list-abolished
 
-# 特定コードを辞書から除外
+# 7桁コード（ssk_shobyomei）は --table 不要
 python scripts/manage_dict_enabled.py --disable 1234567
+
+# 9桁コードは --table 必須
+python scripts/manage_dict_enabled.py --disable 123456789 --table shinryo_koi
+python scripts/manage_dict_enabled.py --disable 123456789 --table iyakuhin
+
+# 再度辞書に含める
+python scripts/manage_dict_enabled.py --enable 1234567
 ```
 
 ## Running Tests

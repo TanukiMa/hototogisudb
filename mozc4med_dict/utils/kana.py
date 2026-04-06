@@ -30,14 +30,12 @@ def normalize_reading(text: str) -> str:
     # ③ カタカナ → 平仮名
     text = jaconv.kata2hira(text)
 
-    # 許容文字チェック（ひらがな、半角数字、全角数字、長音符・中点）
+    # 許容文字チェック（ひらがな、半角数字、長音符・中点）
     for ch in text:
         code = ord(ch)
         if 0x3041 <= code <= 0x3096:  # ひらがな
             continue
         if 0x30 <= code <= 0x39:       # 半角数字 0‑9
-            continue
-        if 0xFF10 <= code <= 0xFF19:   # 全角数字（互換性のため残す）
             continue
         if ch in ("ー", "・"):
             continue

@@ -179,6 +179,8 @@ python scripts/manage_dict_enabled.py --disable 1234567             # 7桁 → s
 python scripts/manage_dict_enabled.py --disable 123456789 --table shinryo_koi
 python scripts/manage_dict_enabled.py --disable 123456789 --table iyakuhin
 python scripts/manage_dict_enabled.py --enable  1234567
+python scripts/manage_dict_enabled.py --enable  123456789 --table shinryo_koi
+python scripts/manage_dict_enabled.py --enable  123456789 --table iyakuhin
 ```
 
 `manage_dict_enabled.py` のコード長による自動判別:
@@ -186,6 +188,7 @@ python scripts/manage_dict_enabled.py --enable  1234567
 | コード長 | `--table` | 対象テーブル |
 |---|---|---|
 | 7桁 | 不要 | `ssk_shobyomei` |
+| 7桁 | 指定あり | エラーで終了 |
 | 9桁 | `shinryo_koi` | `ssk_shinryo_koi` |
 | 9桁 | `iyakuhin` | `ssk_iyakuhin` |
 | 9桁 | 省略 | エラーで終了 |

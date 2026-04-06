@@ -28,3 +28,13 @@ def test_base_importer_duplicate_detection(tmp_path):
         importer = ConcreteImporter()
         with pytest.raises(ValueError, match="already imported"):
             importer.run(file_path=csv_file, source_url="http://example.com", imported_by="test")
+
+
+def test_base_importer_sha256_method_alias(tmp_path):
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b"dummy content")
+    expected = hashlib.sha256(b"dummy content").hexdigest()
+
+    importer = ConcreteImporter()
+    assert importer._sha256(csv_file) == expected
+    assert importer._compute_sha256(csv_file) == expected

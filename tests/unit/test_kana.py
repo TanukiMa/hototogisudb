@@ -49,6 +49,8 @@ def test_normalize_reading_halfwidth_digits():
     assert normalize_reading("ｲﾝｽﾘﾝ10ｴ") == "いんすりん10え"
 
 
-def test_normalize_reading_fullwidth_digits():
-    # 全角数字はそのまま通過
-    assert normalize_reading("ｲﾝｽﾘﾝ１０ｴ") == "いんすりん１０え"
+def test_normalize_reading_fullwidth_digits_raises():
+    import pytest
+
+    with pytest.raises(ValueError):
+        normalize_reading("ｲﾝｽﾘﾝ１０ｴ")

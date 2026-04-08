@@ -63,8 +63,21 @@ class MozcSystemDictExporter:
     ) -> tuple[int, int]:
         """Export dictionary TSV. Returns (written, skipped)."""
         client = get_client()
-        result = client.rpc(_RPC_FUNCTION, {}).execute()
-        rows = self._rows_from_rpc(result.data)
+
+        rows = []
+        offset = 0
+        while True:
+            # PostgREST の max_rows 制限を回避するため、オフセットを用いてページネーションを行う
+            result = client.rpc(_RPC_FUNCTION, {"p_offset": offset}).execute()
+            batch = self._rows_from_rpc(result.data)
+
+            if not batch:
+                break
+
+            rows.extend(batch)
+            if len(batch) < 1000:
+                break
+            offset += len(batch)
 
         logger.info("Fetched %d entries from DB", len(rows))
 

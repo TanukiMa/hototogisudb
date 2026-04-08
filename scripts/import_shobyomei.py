@@ -17,7 +17,7 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        with resolve_csv(args.url, csv_glob="b_*.csv") as csv_path:
+        with resolve_csv(args.url, csv_glob="b_*.txt") as csv_path:
             importer = SskShobyomeiImporter()
             count = importer.run(
                 file_path=csv_path,

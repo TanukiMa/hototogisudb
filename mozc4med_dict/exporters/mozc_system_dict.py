@@ -59,6 +59,7 @@ class MozcSystemDictExporter:
         self,
         output_path: Path,
         dry_run: bool = False,
+        no_skip: bool = False,
     ) -> tuple[int, int]:
         """Export dictionary TSV. Returns (written, skipped)."""
         client = get_client()
@@ -79,12 +80,29 @@ class MozcSystemDictExporter:
                 try:
                     entry = self._build_entry(r)
                 except ValueError as e:
-                    surface = r.get("surface_form")
-                    logger.warning("skipped: %s (surface=%s)", e, surface)
-                    skipped += 1
-                    continue
-                f.write(entry.to_tsv_line() + "\n")
-                written += 1
+                    if no_skip:
+                        # normalize_reading でエラーが出た場合は raw_reading をそのまま使用する
+                        # build_entry を介さず直接 MozcDictEntry を作成
+                        reading_raw = r.get("reading")
+                        left_id = r.get("left_id")
+                        right_id = r.get("right_id")
+                        cost = r.get("cost")
+                        surface_form = r.get("surface_form")
+
+                        entry = MozcDictEntry(
+                            reading=str(reading_raw),
+                            left_id=int(left_id) if isinstance(left_id, (int, float)) else 1849,
+                            right_id=int(right_id) if isinstance(right_id, (int, float)) else 1849,
+                            cost=int(cost) if isinstance(cost, (int, float)) else 5000,
+                            surface_form=str(surface_form),
+                        )
+                    else:
+                        surface = r.get("surface_form")
+                        logger.warning("skipped: %s (surface=%s)", e, surface)
+                        skipped += 1
+                        continue
+                    f.write(entry.to_tsv_line() + "\n")
+                    written += 1
 
         logger.info("Written %d entries to %s (%d skipped)", written, output_path, skipped)
         return written, skipped

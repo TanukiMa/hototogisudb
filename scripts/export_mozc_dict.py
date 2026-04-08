@@ -11,12 +11,13 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 def main() -> None:
     parser = argparse.ArgumentParser(description="Export Mozc system dictionary")
     parser.add_argument("--output", type=Path, default=Path("dist/mozc4med_medical.txt"))
+    parser.add_argument("--no-skip", action="store_true", help="Do not skip entries with non‑kana characters")
     parser.add_argument("--dry-run", action="store_true", help="Count only, no file written")
     parser.add_argument("--include-invalid", action="store_true", help="Export all entries, ignoring normalization errors and NULL raw_reading. For debugging only.")
-    args = parser.parse_args()
 
+    args = parser.parse_args()
     exporter = MozcSystemDictExporter()
-    written, skipped = exporter.export(output_path=args.output, dry_run=args.dry_run, no_skip=args.no_skip, include_invalid=args.include_invalid)
+    written, skipped = exporter.export(output_path=args.output, dry_run=args.dry_run, no_skip=args.no_skip)
     if args.dry_run:
         logging.info("Dry-run: %d entries would be exported", written)
     else:

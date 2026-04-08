@@ -8,7 +8,7 @@ from mozc4med_dict.utils.kana import normalize_reading
 
 logger = logging.getLogger(__name__)
 
-_RPC_FUNCTION = "export_mozc_dict_entries"
+_RPC_FUNCTION = "export_mozc_dict"
 
 
 class MozcSystemDictExporter:
@@ -29,9 +29,9 @@ class MozcSystemDictExporter:
 
     @staticmethod
     def _build_entry(row: dict[str, Any]) -> MozcDictEntry:
-        reading_raw = row.get("reading")
+        reading_raw = row.get("raw_reading")
         if not isinstance(reading_raw, str):
-            raise ValueError(f"Invalid reading value: {reading_raw!r}")
+            raise ValueError(f"Invalid raw_reading value: {reading_raw!r}")
         reading = normalize_reading(reading_raw)
 
         left_id = row.get("left_id")
@@ -63,8 +63,7 @@ class MozcSystemDictExporter:
     ) -> tuple[int, int]:
         """Export dictionary TSV. Returns (written, skipped)."""
         client = get_client()
-        # Supabase RPC のデフォルトは 1000 行まで。全件取得するため limit=0 を指定
-        result = client.rpc(_RPC_FUNCTION, {"limit": 0}).execute()
+        result = client.rpc(_RPC_FUNCTION, {}).execute()
         rows = self._rows_from_rpc(result.data)
 
         logger.info("Fetched %d entries from DB", len(rows))

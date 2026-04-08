@@ -6,7 +6,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.error import URLError
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from urllib.request import urlretrieve
 
 
@@ -17,7 +17,7 @@ class DownloadError(Exception):
 def _url_to_local_path(url: str) -> Path:
     """Convert a file:// URL to a local Path, handling Windows drive letters."""
     parsed = urlparse(url)
-    path_str = parsed.path
+    path_str = unquote(parsed.path)
     # Windows: file:///C:/foo → /C:/foo → C:/foo
     if len(path_str) >= 3 and path_str[0] == "/" and path_str[2] == ":":
         path_str = path_str[1:]
@@ -84,4 +84,9 @@ def _extract_csv(zip_path: Path, extract_dir: Path, csv_glob: str) -> Generator[
     matches = list(extract_dir.glob(csv_glob))
     if not matches:
         raise DownloadError(f"No file matching {csv_glob!r} found in {zip_path.name}")
+    if len(matches) > 1:
+        names = ", ".join(sorted(path.name for path in matches))
+        raise DownloadError(
+            f"Multiple files matching {csv_glob!r} found in {zip_path.name}: {names}"
+        )
     yield matches[0]

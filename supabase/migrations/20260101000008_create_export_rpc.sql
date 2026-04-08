@@ -1,6 +1,6 @@
-CREATE OR REPLACE FUNCTION export_mozc_dict_entries()
+CREATE OR REPLACE FUNCTION export_mozc_dict()
 RETURNS TABLE (
-    reading      TEXT,
+    raw_reading  TEXT,
     left_id      INTEGER,
     right_id     INTEGER,
     cost         INTEGER,
@@ -10,7 +10,7 @@ LANGUAGE sql
 STABLE
 AS $$
     SELECT
-        s.kana_name                            AS reading,
+        s.kana_name                            AS raw_reading,
         1849                                   AS left_id,
         1849                                   AS right_id,
         4800                                   AS cost,
@@ -23,7 +23,7 @@ AS $$
     UNION ALL
 
     SELECT
-        i.kana_name                            AS reading,
+        i.kana_name                            AS raw_reading,
         1849                                   AS left_id,
         1849                                   AS right_id,
         CASE WHEN i.is_generic THEN 5200 ELSE 5000 END AS cost,
@@ -36,7 +36,7 @@ AS $$
     UNION ALL
 
     SELECT
-        i.kana_name                            AS reading,
+        i.kana_name                            AS raw_reading,
         1849                                   AS left_id,
         1849                                   AS right_id,
         CASE WHEN i.is_generic THEN 5200 ELSE 5000 END AS cost,
@@ -49,7 +49,7 @@ AS $$
     UNION ALL
 
     SELECT
-        k.abbr_kana_name                               AS reading,
+        k.abbr_kana_name                               AS raw_reading,
         1849                                           AS left_id,
         1849                                           AS right_id,
         5500                                           AS cost,
@@ -62,7 +62,7 @@ AS $$
     UNION ALL
 
     SELECT
-        c.reading                              AS reading,
+        c.reading                              AS raw_reading,
         COALESCE(p.left_id,  1849)             AS left_id,
         COALESCE(p.right_id, 1849)             AS right_id,
         c.cost                                 AS cost,
@@ -71,5 +71,5 @@ AS $$
     LEFT JOIN pos_types p ON p.id = c.pos_type_id
     WHERE c.dict_enabled = TRUE
 
-    ORDER BY cost, reading
+    ORDER BY cost, raw_reading
 $$;

@@ -28,5 +28,6 @@
       "Skill(claude-md-management:revise-claude-md)",
       "Bash(pytest tests/unit/ -v --tb=short)"
     ]
-  }
+  },
+  "outputStyle": "default"
 }

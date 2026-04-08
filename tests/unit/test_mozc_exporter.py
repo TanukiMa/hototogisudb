@@ -6,14 +6,14 @@ from mozc4med_dict.exporters.mozc_system_dict import MozcSystemDictExporter
 def test_exporter_generates_tsv(tmp_path):
     mock_data = [
         {
-            "reading": "とうにょうびょう",
+            "raw_reading": "とうにょうびょう",
             "left_id": 1849,
             "right_id": 1849,
             "cost": 4800,
             "surface_form": "糖尿病",
         },
         {
-            "reading": "あすぴりん",
+            "raw_reading": "あすぴりん",
             "left_id": 1849,
             "right_id": 1849,
             "cost": 5000,
@@ -30,6 +30,7 @@ def test_exporter_generates_tsv(tmp_path):
         exporter = MozcSystemDictExporter()
         written, skipped = exporter.export(output_path=out_file)
 
+    assert mock_client.rpc.call_args[0][0] == "export_mozc_dict"
     assert written == 2
     assert skipped == 0
     lines = out_file.read_text(encoding="utf-8").splitlines()
@@ -40,7 +41,7 @@ def test_exporter_generates_tsv(tmp_path):
 def test_exporter_dry_run(tmp_path):
     mock_data = [
         {
-            "reading": "とうにょうびょう",
+            "raw_reading": "とうにょうびょう",
             "left_id": 1849,
             "right_id": 1849,
             "cost": 4800,

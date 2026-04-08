@@ -60,6 +60,7 @@ class MozcSystemDictExporter:
         output_path: Path,
         dry_run: bool = False,
         no_skip: bool = False,
+        include_invalid: bool = False,
     ) -> tuple[int, int]:
         """Export dictionary TSV. Returns (written, skipped)."""
         client = get_client()
@@ -92,21 +93,26 @@ class MozcSystemDictExporter:
                 try:
                     entry = self._build_entry(r)
                 except ValueError as e:
-                    if no_skip:
-                        # normalize_reading でエラーが出た場合は raw_reading をそのまま使用する
-                        # build_entry を介さず直接 MozcDictEntry を作成
-                        reading_raw = r.get("reading")
+                    if no_skip or include_invalid:
+                        # normalize_reading が失敗した、または raw_reading が NULL の場合はそのまま書き込む
+                        # `raw_reading` が None のときは空文字列にフォールバック
+                        reading_raw = r.get("raw_reading") or ""
                         left_id = r.get("left_id")
                         right_id = r.get("right_id")
                         cost = r.get("cost")
                         surface_form = r.get("surface_form")
-
                         entry = MozcDictEntry(
                             reading=str(reading_raw),
                             left_id=int(left_id) if isinstance(left_id, (int, float)) else 1849,
                             right_id=int(right_id) if isinstance(right_id, (int, float)) else 1849,
                             cost=int(cost) if isinstance(cost, (int, float)) else 5000,
                             surface_form=str(surface_form),
+                        )
+                        logger.info(
+                            "fallback (%s): %s -> %s",
+                            "include-invalid" if include_invalid else "no-skip",
+                            reading_raw,
+                            entry.reading,
                         )
                     else:
                         surface = r.get("surface_form")

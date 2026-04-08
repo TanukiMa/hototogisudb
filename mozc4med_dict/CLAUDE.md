@@ -184,6 +184,10 @@ def export(output: Path) -> tuple[int, int]:
     return written, skipped
 ```
 
+# New flag: `--include-invalid`
+#   Use this flag with `scripts/export_mozc_dict.py` to force the exporter to write **all** rows, including those that raise `ValueError` during `normalize_reading()` and rows where `raw_reading` is `NULL`.
+#   The resulting TSV may contain empty or non‑kana readings, which can break Mozc. Intended for debugging or data‑audit purposes.
+
 ---
 
 ## `utils/kana.py` — `normalize_reading()`

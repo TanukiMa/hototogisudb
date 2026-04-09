@@ -171,12 +171,13 @@ python scripts/import_csv.py         --file data/custom_terms.csv  --source "Cus
 # Export
 python scripts/export_mozc_dict.py --output dist/mozc4med_medical.txt
 python scripts/export_mozc_dict.py --dry-run    # Count only, no file written
-# `--no-skip` オプションを付与すると、normalize_reading が失敗した場合でも raw_reading をそのまま出力します。スキップせずにすべてのエントリを TSV に書き込みます。
-# New flag: --include-invalid
-#   Export *all* entries, including rows where `normalize_reading()` fails *and* rows where `raw_reading` is NULL.
-#   Use with caution: the resulting TSV may contain empty or non‑kana readings, which can break Mozc.
+# `--no-skip` writes entries even when normalize_reading fails (reading may be set to the raw value or become None).
+# `--include-invalid` (debug mode) exports *all* entries, including those where normalize_reading fails **and** rows with NULL raw_reading.
+# Use `--include-invalid` with caution: the TSV may contain empty or non‑kana readings, which can break Mozc.
 python scripts/export_mozc_dict.py --include-invalid   # Debug/diagnostic mode (exports everything)
-gh workflow run export_mozc_dict.yml             # Trigger GHA manually
+gh workflow run export_mozc_dict.yml             # Trigger the GitHub Actions workflow manually
+# Note (2026‑04‑09): Fixed an export bug where normal entries were incorrectly skipped. The exporter now correctly writes all enabled entries.
+
 
 # Manage dict_enabled
 python scripts/manage_dict_enabled.py --list-abolished

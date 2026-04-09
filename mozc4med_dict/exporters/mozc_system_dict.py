@@ -61,8 +61,13 @@ class MozcSystemDictExporter:
         dry_run: bool = False,
         no_skip: bool = False,
         include_invalid: bool = False,
+        **kwargs,
     ) -> tuple[int, int]:
         """Export dictionary TSV. Returns (written, skipped)."""
+        # Accept unexpected kwargs for backward compatibility
+        if kwargs:
+            # If include_invalid was passed under a different name, map it
+            include_invalid = kwargs.get('include_invalid', include_invalid)
         client = get_client()
 
         rows = []
@@ -119,8 +124,8 @@ class MozcSystemDictExporter:
                         logger.warning("skipped: %s (surface=%s)", e, surface)
                         skipped += 1
                         continue
-                    f.write(entry.to_tsv_line() + "\n")
-                    written += 1
+                f.write(entry.to_tsv_line() + "\n")
+                written += 1
 
         logger.info("Written %d entries to %s (%d skipped)", written, output_path, skipped)
         return written, skipped
